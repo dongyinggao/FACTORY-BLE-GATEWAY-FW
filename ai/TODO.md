@@ -1,6 +1,6 @@
 下一步建议不要再纠结版本，可以直接开始：
 
-安装 ESP-IDF v5.4.4
+安装 ESP-IDF v5.5.5
 VS Code ESP-IDF Extension 配置
 创建 CoreS3 BSP Hello World
 验证 LCD / WiFi / BLE Scanner
@@ -12,7 +12,7 @@ VS Code ESP-IDF Extension 配置
 
 目标：
 
-> **先确认 ESP-IDF v5.4.4 + VS Code + M5Stack CoreS3-SE 硬件链路完全正常。**
+> **先确认 ESP-IDF v5.5.5 + VS Code + M5Stack CoreS3-SE 硬件链路完全正常。**
 
 这一阶段不要急着写 BLE 网关业务，先完成：
 

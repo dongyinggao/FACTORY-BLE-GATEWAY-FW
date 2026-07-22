@@ -6,7 +6,7 @@ M5Stack CoreS3-SE
 
 ESP32-S3
 
-ESP-IDF v5.4.4
+ESP-IDF v5.5.5
 
 
 Architecture:

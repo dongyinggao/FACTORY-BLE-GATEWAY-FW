@@ -91,7 +91,7 @@ ESP-IDF Extension
 固定：
 
 ```
-ESP-IDF v5.4.4
+ESP-IDF v5.5.5
 ```
 
 原因：
@@ -673,7 +673,7 @@ xxx_t
 
 ✓ Ubuntu 22.04
 ✓ VS Code
-✓ ESP-IDF v5.4.4
+✓ ESP-IDF v5.5.5
 
 
 [进行中]

@@ -356,7 +356,7 @@ SD写入
 ```
 Step 3:
 
-ESP-IDF v5.4.4
+ESP-IDF v5.5.5
 
         ↓
 
@@ -404,7 +404,7 @@ BSP:
 espressif/m5stack_core_s3
 
 ESP-IDF:
-v5.4.4
+v5.5.5
 
 BLE:
 NimBLE
