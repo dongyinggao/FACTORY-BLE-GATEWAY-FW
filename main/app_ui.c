@@ -9,6 +9,7 @@
 #include "lvgl.h"
 
 #include "ble_scanner.h"
+#include "device_manager.h"
 
 static lv_obj_t *scanner_status_label;
 static lv_obj_t *device_label;
@@ -28,14 +29,14 @@ static const char *scanner_state_text(ble_scanner_state_t state)
     }
 }
 
-static void update_report(const ble_scan_report_t *report)
+static void update_device(const managed_device_t *device)
 {
     lv_label_set_text_fmt(device_label,
-                          "%s\n%02X:%02X:%02X:%02X:%02X:%02X\nRSSI: %d dBm",
-                          report->name,
-                          report->address[5], report->address[4], report->address[3],
-                          report->address[2], report->address[1], report->address[0],
-                          report->rssi);
+                          "%s (%s)\n%02X:%02X:%02X:%02X:%02X:%02X\nRSSI: %d dBm",
+                          device->report.name, device->online ? "Online" : "Offline",
+                          device->report.address[5], device->report.address[4], device->report.address[3],
+                          device->report.address[2], device->report.address[1], device->report.address[0],
+                          device->report.rssi);
 }
 
 static void scanner_toggle_cb(lv_event_t *event)
@@ -55,8 +56,8 @@ static void scanner_toggle_cb(lv_event_t *event)
 
 static void app_ui_task(void *parameter)
 {
-    QueueHandle_t event_queue = ble_scanner_get_event_queue();
-    ble_scanner_event_t event;
+    QueueHandle_t event_queue = device_manager_get_event_queue();
+    device_manager_event_t event;
 
     (void)parameter;
     while (true) {
@@ -68,13 +69,13 @@ static void app_ui_task(void *parameter)
             continue;
         }
 
-        if (event.type == BLE_SCANNER_EVENT_STATE) {
-            lv_label_set_text(scanner_status_label, scanner_state_text(event.state));
-            if (event.state == BLE_SCANNER_STATE_ERROR) {
+        if (event.type == DEVICE_MANAGER_EVENT_SCANNER_STATE) {
+            lv_label_set_text(scanner_status_label, scanner_state_text(event.scanner_state));
+            if (event.scanner_state == BLE_SCANNER_STATE_ERROR) {
                 lv_label_set_text_fmt(device_label, "Scanner error: %d", event.error_code);
             }
-        } else if (event.type == BLE_SCANNER_EVENT_REPORT) {
-            update_report(&event.report);
+        } else {
+            update_device(&event.device);
         }
 
         bsp_display_unlock();

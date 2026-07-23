@@ -2,6 +2,7 @@
 
 #include "app_ui.h"
 #include "ble_scanner.h"
+#include "device_manager.h"
 
 void app_main(void)
 {
@@ -13,5 +14,6 @@ void app_main(void)
     ESP_ERROR_CHECK(result);
 
     ble_scanner_init();
+    device_manager_init();
     app_ui_start();
 }
