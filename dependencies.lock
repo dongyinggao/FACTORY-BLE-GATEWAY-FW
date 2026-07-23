@@ -83,19 +83,19 @@ dependencies:
       type: service
     version: 1.0.0
   espressif/esp_lcd_ili9341:
-    component_hash: 31f1b793aa2110dd2ae071c21ccbff0a4eb20d9a4ee40b6294c0dc0ad9552c4e
+    component_hash: 0baab584e0e490511d6bdbae6aa045130424d732ecdaad6cd1d3bd3c0abe2c30
     dependencies:
-    - name: idf
-      require: private
-      version: '>=4.4'
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
       require: private
       version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4'
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 1.2.0
+    version: 2.0.2
   espressif/esp_lcd_touch:
     component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
     dependencies:
@@ -317,6 +317,6 @@ dependencies:
 direct_dependencies:
 - espressif/m5stack_core_s3
 - idf
-manifest_hash: 8f9bdd86f3c93e2c7e2a8739b01efd80b0025d1fa4ca243bbf25d43f5ba9f6a7
+manifest_hash: 74849b2715dff2ff289feecc263080671cc03e420dc6b718475f5f52bea088d9
 target: esp32s3
 version: 2.0.0
