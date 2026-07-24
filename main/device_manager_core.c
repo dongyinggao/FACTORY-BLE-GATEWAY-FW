@@ -78,3 +78,31 @@ device_registry_result_t device_registry_mark_next_offline(device_registry_t *re
     }
     return DEVICE_REGISTRY_NO_CHANGE;
 }
+
+void device_observation_clock_init(device_observation_clock_t *clock, uint32_t wall_ms)
+{
+    clock->observing = false;
+    clock->observed_ms = 0;
+    clock->last_wall_ms = wall_ms;
+}
+
+void device_observation_clock_tick(device_observation_clock_t *clock, uint32_t wall_ms)
+{
+    if (clock->observing) {
+        clock->observed_ms += (uint32_t)(wall_ms - clock->last_wall_ms);
+    }
+    clock->last_wall_ms = wall_ms;
+}
+
+void device_observation_clock_set_observing(device_observation_clock_t *clock,
+                                            bool observing,
+                                            uint32_t wall_ms)
+{
+    device_observation_clock_tick(clock, wall_ms);
+    clock->observing = observing;
+}
+
+uint32_t device_observation_clock_now(const device_observation_clock_t *clock)
+{
+    return clock->observed_ms;
+}

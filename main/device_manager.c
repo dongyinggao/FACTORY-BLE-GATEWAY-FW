@@ -7,6 +7,7 @@
 static const char *TAG = "device_manager";
 static QueueHandle_t manager_event_queue;
 static device_registry_t registry;
+static device_observation_clock_t observation_clock;
 
 static uint32_t manager_now_ms(void)
 {
@@ -41,10 +42,21 @@ static void manager_publish_scanner_state(const ble_scanner_event_t *scanner_eve
     }
 }
 
+static void manager_handle_scanner_state(const ble_scanner_event_t *scanner_event, uint32_t wall_ms)
+{
+    device_observation_clock_set_observing(&observation_clock,
+                                            scanner_event->state == BLE_SCANNER_STATE_SCANNING,
+                                            wall_ms);
+    manager_publish_scanner_state(scanner_event);
+}
+
 static void manager_process_report(const ble_scan_report_t *report)
 {
     size_t index;
-    device_registry_result_t result = device_registry_process_report(&registry, report, manager_now_ms(), &index);
+    device_registry_result_t result = device_registry_process_report(&registry,
+                                                                       report,
+                                                                       device_observation_clock_now(&observation_clock),
+                                                                       &index);
 
     switch (result) {
     case DEVICE_REGISTRY_ADDED:
@@ -67,11 +79,11 @@ static void manager_process_report(const ble_scan_report_t *report)
 
 static void manager_mark_offline_devices(void)
 {
-    const uint32_t now_ms = manager_now_ms();
-
     size_t index;
 
-    while (device_registry_mark_next_offline(&registry, now_ms, &index) == DEVICE_REGISTRY_OFFLINE) {
+    while (device_registry_mark_next_offline(&registry,
+                                              device_observation_clock_now(&observation_clock),
+                                              &index) == DEVICE_REGISTRY_OFFLINE) {
         ESP_LOGI(TAG, "device offline: %s", registry.devices[index].report.name);
         manager_publish(DEVICE_MANAGER_EVENT_DEVICE_OFFLINE, &registry.devices[index]);
     }
@@ -84,9 +96,16 @@ static void device_manager_task(void *parameter)
 
     (void)parameter;
     while (true) {
-        if (xQueueReceive(scanner_queue, &scanner_event, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        BaseType_t received;
+        uint32_t wall_ms;
+
+        received = xQueueReceive(scanner_queue, &scanner_event, pdMS_TO_TICKS(1000));
+        wall_ms = manager_now_ms();
+        device_observation_clock_tick(&observation_clock, wall_ms);
+
+        if (received == pdTRUE) {
             if (scanner_event.type == BLE_SCANNER_EVENT_STATE) {
-                manager_publish_scanner_state(&scanner_event);
+                manager_handle_scanner_state(&scanner_event, wall_ms);
             } else if (scanner_event.type == BLE_SCANNER_EVENT_REPORT) {
                 manager_process_report(&scanner_event.report);
             }
@@ -99,6 +118,7 @@ void device_manager_init(void)
 {
     manager_event_queue = xQueueCreate(BLE_EVENT_QUEUE_MAX_LEN, sizeof(device_manager_event_t));
     configASSERT(manager_event_queue != NULL);
+    device_observation_clock_init(&observation_clock, manager_now_ms());
     xTaskCreate(device_manager_task, "device_manager", 4096, NULL, 5, NULL);
 }
 
