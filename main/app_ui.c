@@ -9,11 +9,14 @@
 #include "lvgl.h"
 
 #include "ble_scanner.h"
+#include "device_list_model.h"
 #include "device_manager.h"
 
 static lv_obj_t *scanner_status_label;
-static lv_obj_t *device_label;
+static lv_obj_t *device_count_label;
+static lv_obj_t *device_rows[DEVICE_LIST_VISIBLE_ROWS];
 static lv_obj_t *toggle_label;
+static device_list_model_t device_list;
 
 static const char *scanner_state_text(ble_scanner_state_t state)
 {
@@ -29,14 +32,25 @@ static const char *scanner_state_text(ble_scanner_state_t state)
     }
 }
 
-static void update_device(const managed_device_t *device)
+static void update_device_list(void)
 {
-    lv_label_set_text_fmt(device_label,
-                          "%s (%s)\n%02X:%02X:%02X:%02X:%02X:%02X\nRSSI: %d dBm",
-                          device->report.name, device->online ? "Online" : "Offline",
-                          device->report.address[5], device->report.address[4], device->report.address[3],
-                          device->report.address[2], device->report.address[1], device->report.address[0],
-                          device->report.rssi);
+    lv_label_set_text_fmt(device_count_label,
+                          "Devices: %u  Online: %u",
+                          (unsigned int)device_list_model_count(&device_list),
+                          (unsigned int)device_list_model_online_count(&device_list));
+
+    for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {
+        const managed_device_t *device = device_list_model_get_ranked(&device_list, row);
+        if (device == NULL) {
+            lv_label_set_text(device_rows[row], row == 0 ? "No matching device yet" : "");
+            continue;
+        }
+        lv_label_set_text_fmt(device_rows[row],
+                              "%s %s  %d dBm\n%02X:%02X:%02X:%02X:%02X:%02X",
+                              device->online ? "ON" : "OFF", device->report.name, device->report.rssi,
+                              device->report.address[5], device->report.address[4], device->report.address[3],
+                              device->report.address[2], device->report.address[1], device->report.address[0]);
+    }
 }
 
 static void scanner_toggle_cb(lv_event_t *event)
@@ -72,10 +86,14 @@ static void app_ui_task(void *parameter)
         if (event.type == DEVICE_MANAGER_EVENT_SCANNER_STATE) {
             lv_label_set_text(scanner_status_label, scanner_state_text(event.scanner_state));
             if (event.scanner_state == BLE_SCANNER_STATE_ERROR) {
-                lv_label_set_text_fmt(device_label, "Scanner error: %d", event.error_code);
+                lv_label_set_text_fmt(device_count_label, "Scanner error: %d", event.error_code);
             }
         } else {
-            update_device(&event.device);
+            if (device_list_model_apply(&device_list, &event.device) == DEVICE_LIST_FULL) {
+                lv_label_set_text(device_count_label, "Device list full");
+            } else {
+                update_device_list();
+            }
         }
 
         bsp_display_unlock();
@@ -97,13 +115,21 @@ void app_ui_start(void)
     lv_label_set_text(scanner_status_label, "BLE: Initializing");
     lv_obj_align(scanner_status_label, LV_ALIGN_TOP_MID, 0, 35);
 
-    device_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(device_label, "No matching device yet");
-    lv_obj_align(device_label, LV_ALIGN_CENTER, 0, 0);
+    device_count_label = lv_label_create(lv_scr_act());
+    lv_label_set_text(device_count_label, "Devices: 0  Online: 0");
+    lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 55);
+
+    for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {
+        device_rows[row] = lv_label_create(lv_scr_act());
+        lv_label_set_long_mode(device_rows[row], LV_LABEL_LONG_CLIP);
+        lv_obj_set_width(device_rows[row], 300);
+        lv_obj_align(device_rows[row], LV_ALIGN_TOP_MID, 0, 76 + (int32_t)(row * 29));
+    }
+    update_device_list();
 
     lv_obj_t *button = lv_button_create(lv_scr_act());
-    lv_obj_set_size(button, 200, 48);
-    lv_obj_align(button, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_set_size(button, 180, 30);
+    lv_obj_align(button, LV_ALIGN_BOTTOM_MID, 0, -5);
     lv_obj_add_event_cb(button, scanner_toggle_cb, LV_EVENT_CLICKED, NULL);
 
     toggle_label = lv_label_create(button);
