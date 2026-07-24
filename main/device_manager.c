@@ -1,44 +1,16 @@
 #include "device_manager.h"
 
-#include <string.h>
-
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 static const char *TAG = "device_manager";
 static QueueHandle_t manager_event_queue;
-static managed_device_t devices[DEVICE_MANAGER_MAX_DEVICES];
+static device_registry_t registry;
 
 static uint32_t manager_now_ms(void)
 {
     return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
-}
-
-static bool manager_same_address(const managed_device_t *device, const ble_scan_report_t *report)
-{
-    return device->report.address_type == report->address_type &&
-           memcmp(device->report.address, report->address, sizeof(report->address)) == 0;
-}
-
-static int manager_find_device(const ble_scan_report_t *report)
-{
-    for (int index = 0; index < DEVICE_MANAGER_MAX_DEVICES; ++index) {
-        if (devices[index].report.name[0] != '\0' && manager_same_address(&devices[index], report)) {
-            return index;
-        }
-    }
-    return -1;
-}
-
-static int manager_find_empty_slot(void)
-{
-    for (int index = 0; index < DEVICE_MANAGER_MAX_DEVICES; ++index) {
-        if (devices[index].report.name[0] == '\0') {
-            return index;
-        }
-    }
-    return -1;
 }
 
 static void manager_publish(device_manager_event_type_t type, const managed_device_t *device)
@@ -71,45 +43,37 @@ static void manager_publish_scanner_state(const ble_scanner_event_t *scanner_eve
 
 static void manager_process_report(const ble_scan_report_t *report)
 {
-    int index = manager_find_device(report);
-    bool was_online = false;
+    size_t index;
+    device_registry_result_t result = device_registry_process_report(&registry, report, manager_now_ms(), &index);
 
-    if (index < 0) {
-        index = manager_find_empty_slot();
-        if (index < 0) {
-            ESP_LOGW(TAG, "device table full; report dropped");
-            return;
-        }
-        devices[index].report = *report;
-        devices[index].online = true;
-        devices[index].last_seen_ms = manager_now_ms();
+    switch (result) {
+    case DEVICE_REGISTRY_ADDED:
         ESP_LOGI(TAG, "device added: %s", report->name);
-        manager_publish(DEVICE_MANAGER_EVENT_DEVICE_ADDED, &devices[index]);
-        return;
+        manager_publish(DEVICE_MANAGER_EVENT_DEVICE_ADDED, &registry.devices[index]);
+        break;
+    case DEVICE_REGISTRY_UPDATED:
+        manager_publish(DEVICE_MANAGER_EVENT_DEVICE_UPDATED, &registry.devices[index]);
+        break;
+    case DEVICE_REGISTRY_ONLINE:
+        manager_publish(DEVICE_MANAGER_EVENT_DEVICE_ONLINE, &registry.devices[index]);
+        break;
+    case DEVICE_REGISTRY_FULL:
+        ESP_LOGW(TAG, "device table full; report dropped");
+        break;
+    default:
+        break;
     }
-
-    was_online = devices[index].online;
-    devices[index].report = *report;
-    devices[index].online = true;
-    devices[index].last_seen_ms = manager_now_ms();
-    manager_publish(was_online ? DEVICE_MANAGER_EVENT_DEVICE_UPDATED : DEVICE_MANAGER_EVENT_DEVICE_ONLINE,
-                    &devices[index]);
 }
 
 static void manager_mark_offline_devices(void)
 {
     const uint32_t now_ms = manager_now_ms();
 
-    for (int index = 0; index < DEVICE_MANAGER_MAX_DEVICES; ++index) {
-        managed_device_t *device = &devices[index];
-        if (device->report.name[0] == '\0' || !device->online) {
-            continue;
-        }
-        if ((uint32_t)(now_ms - device->last_seen_ms) >= DEVICE_MANAGER_OFFLINE_TIMEOUT_MS) {
-            device->online = false;
-            ESP_LOGI(TAG, "device offline: %s", device->report.name);
-            manager_publish(DEVICE_MANAGER_EVENT_DEVICE_OFFLINE, device);
-        }
+    size_t index;
+
+    while (device_registry_mark_next_offline(&registry, now_ms, &index) == DEVICE_REGISTRY_OFFLINE) {
+        ESP_LOGI(TAG, "device offline: %s", registry.devices[index].report.name);
+        manager_publish(DEVICE_MANAGER_EVENT_DEVICE_OFFLINE, &registry.devices[index]);
     }
 }
 

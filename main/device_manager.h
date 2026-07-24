@@ -1,15 +1,10 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
 #include "ble_scanner.h"
-
-#define DEVICE_MANAGER_MAX_DEVICES 16
-#define DEVICE_MANAGER_OFFLINE_TIMEOUT_MS 60000
+#include "device_manager_core.h"
 
 typedef enum {
     DEVICE_MANAGER_EVENT_SCANNER_STATE,
@@ -18,12 +13,6 @@ typedef enum {
     DEVICE_MANAGER_EVENT_DEVICE_ONLINE,
     DEVICE_MANAGER_EVENT_DEVICE_OFFLINE,
 } device_manager_event_type_t;
-
-typedef struct {
-    ble_scan_report_t report;
-    bool online;
-    uint32_t last_seen_ms;
-} managed_device_t;
 
 typedef struct {
     device_manager_event_type_t type;

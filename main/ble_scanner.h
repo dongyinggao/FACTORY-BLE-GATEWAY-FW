@@ -6,9 +6,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
-#include "device_filter.h"
+#include "ble_types.h"
 
-#define BLE_ADV_DATA_MAX_LEN 31
 #define BLE_EVENT_QUEUE_MAX_LEN 12
 
 typedef enum {
@@ -16,15 +15,6 @@ typedef enum {
     BLE_SCANNER_STATE_SCANNING,
     BLE_SCANNER_STATE_ERROR,
 } ble_scanner_state_t;
-
-typedef struct {
-    char name[BLE_DEVICE_NAME_MAX_LEN];
-    uint8_t address[6];
-    uint8_t address_type;
-    int8_t rssi;
-    uint8_t adv_data_len;
-    uint8_t adv_data[BLE_ADV_DATA_MAX_LEN];
-} ble_scan_report_t;
 
 typedef enum {
     BLE_SCANNER_EVENT_STATE,

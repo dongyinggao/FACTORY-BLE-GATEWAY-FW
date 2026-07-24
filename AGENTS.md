@@ -25,12 +25,11 @@ idf.py build
 ```
 
 Build output is `build/ble_gateway.bin`. Use `idf.py -p /dev/ttyACM0 flash
-monitor` only with connected hardware. Run the current host-side unit test
-without hardware:
+monitor` only with connected hardware. Run all host-side unit tests without
+hardware:
 
 ```bash
-gcc -std=c99 -Wall -Wextra -Werror -I main main/device_filter.c \
-  tests/device_filter_test.c -o /tmp/device_filter_test && /tmp/device_filter_test
+./tests/run_host_tests.sh
 ```
 
 Avoid `idf.py fullclean` unless necessary: it may try to reconcile managed
