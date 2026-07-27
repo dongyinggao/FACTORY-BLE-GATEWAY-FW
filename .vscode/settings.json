@@ -4,15 +4,16 @@
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
-  "idf.port": "detect",
+  "idf.port": "/dev/ttyACM0",
   "idf.currentSetup": "/home/sm-dawn/.espressif/v5.5.5/esp-idf",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
-  },
+},
   "clangd.path": "/home/sm-dawn/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=/home/sm-dawn/work/project/BLEGateway/build"
-  ]
+],
+"idf.flashType": "UART"
 }
