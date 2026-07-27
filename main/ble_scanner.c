@@ -14,6 +14,8 @@ static QueueHandle_t scanner_event_queue;
 static bool scanner_enabled;
 static bool scanner_ready;
 static bool scan_in_progress;
+static bool scan_cancel_pending;
+static ble_scanner_state_t scanner_state;
 static uint8_t own_address_type;
 
 static void scanner_publish_state(ble_scanner_state_t state, int error_code)
@@ -27,6 +29,12 @@ static void scanner_publish_state(ble_scanner_state_t state, int error_code)
     if (xQueueSend(scanner_event_queue, &event, 0) != pdTRUE) {
         ESP_LOGW(TAG, "scanner event queue full; state event dropped");
     }
+}
+
+static void scanner_set_state(ble_scanner_state_t state, int error_code)
+{
+    scanner_state = state;
+    scanner_publish_state(state, error_code);
 }
 
 static void scanner_start_session(void);
@@ -79,10 +87,12 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
         scan_in_progress = false;
+        scan_cancel_pending = false;
+        ESP_LOGI(TAG, "scan session completed: reason=%d", event->disc_complete.reason);
         if (scanner_enabled) {
             scanner_start_session();
         } else {
-            scanner_publish_state(BLE_SCANNER_STATE_IDLE, 0);
+            scanner_set_state(BLE_SCANNER_STATE_IDLE, 0);
         }
         return 0;
 
@@ -108,12 +118,12 @@ static void scanner_start_session(void)
     rc = ble_gap_disc(own_address_type, 500, &parameters, scanner_gap_event, NULL);
     if (rc != 0) {
         ESP_LOGE(TAG, "unable to start scan: rc=%d", rc);
-        scanner_publish_state(BLE_SCANNER_STATE_ERROR, rc);
+        scanner_set_state(BLE_SCANNER_STATE_ERROR, rc);
         return;
     }
 
     scan_in_progress = true;
-    scanner_publish_state(BLE_SCANNER_STATE_SCANNING, 0);
+    scanner_set_state(BLE_SCANNER_STATE_SCANNING, 0);
     ESP_LOGI(TAG, "active scan started for 5 seconds");
 }
 
@@ -122,21 +132,23 @@ static void scanner_on_sync(void)
     int rc = ble_hs_id_infer_auto(0, &own_address_type);
     if (rc != 0) {
         ESP_LOGE(TAG, "unable to infer address type: rc=%d", rc);
-        scanner_publish_state(BLE_SCANNER_STATE_ERROR, rc);
+        scanner_set_state(BLE_SCANNER_STATE_ERROR, rc);
         return;
     }
 
     scanner_ready = true;
+    scan_cancel_pending = false;
     ESP_LOGI(TAG, "NimBLE host synchronized");
-    scanner_publish_state(BLE_SCANNER_STATE_IDLE, 0);
+    scanner_set_state(BLE_SCANNER_STATE_IDLE, 0);
     scanner_start_session();
 }
 
 static void scanner_on_reset(int reason)
 {
     scan_in_progress = false;
+    scan_cancel_pending = false;
     ESP_LOGW(TAG, "NimBLE reset: reason=%d", reason);
-    scanner_publish_state(BLE_SCANNER_STATE_ERROR, reason);
+    scanner_set_state(BLE_SCANNER_STATE_ERROR, reason);
 }
 
 static void scanner_host_task(void *parameter)
@@ -169,25 +181,67 @@ void ble_scanner_init(void)
 void ble_scanner_start(void)
 {
     scanner_enabled = true;
+    if (scanner_state == BLE_SCANNER_STATE_STOPPING) {
+        ESP_LOGI(TAG, "scan stop in progress; restart will begin after cancel completes");
+        return;
+    }
     scanner_start_session();
 }
 
 void ble_scanner_stop(void)
 {
     scanner_enabled = false;
-    if (scan_in_progress) {
-        int rc = ble_gap_disc_cancel();
-        if (rc != 0) {
-            ESP_LOGW(TAG, "unable to cancel scan: rc=%d", rc);
-        }
-    } else {
-        scanner_publish_state(BLE_SCANNER_STATE_IDLE, 0);
+    if (scanner_state == BLE_SCANNER_STATE_STOPPING || scan_cancel_pending) {
+        ESP_LOGI(TAG, "scan cancellation already pending");
+        return;
     }
+
+    if (!scan_in_progress) {
+        scan_cancel_pending = false;
+        scanner_set_state(BLE_SCANNER_STATE_IDLE, 0);
+        return;
+    }
+
+    scan_cancel_pending = true;
+    scanner_set_state(BLE_SCANNER_STATE_STOPPING, 0);
+    int rc = ble_gap_disc_cancel();
+    if (rc == BLE_HS_EALREADY) {
+        if (!ble_gap_disc_active()) {
+            scan_in_progress = false;
+            scan_cancel_pending = false;
+            scanner_set_state(BLE_SCANNER_STATE_IDLE, 0);
+        } else {
+            ESP_LOGI(TAG, "scan cancellation already pending");
+        }
+        return;
+    }
+
+    if (rc != 0) {
+        scan_cancel_pending = false;
+        scanner_set_state(BLE_SCANNER_STATE_ERROR, rc);
+        return;
+    }
+
+    /*
+     * NimBLE clears the discovery procedure synchronously when cancellation
+     * succeeds.  Unlike a time-expired session, this path does not deliver a
+     * BLE_GAP_EVENT_DISC_COMPLETE callback, so waiting for that event would
+     * leave the UI in STOPPING forever.
+     */
+    scan_in_progress = false;
+    scan_cancel_pending = false;
+    scanner_set_state(BLE_SCANNER_STATE_IDLE, 0);
+    ESP_LOGI(TAG, "scan stopped");
 }
 
 bool ble_scanner_is_enabled(void)
 {
     return scanner_enabled;
+}
+
+ble_scanner_state_t ble_scanner_get_state(void)
+{
+    return scanner_state;
 }
 
 QueueHandle_t ble_scanner_get_event_queue(void)

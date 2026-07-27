@@ -25,10 +25,26 @@ static const char *scanner_state_text(ble_scanner_state_t state)
         return "BLE: Idle";
     case BLE_SCANNER_STATE_SCANNING:
         return "BLE: Scanning";
+    case BLE_SCANNER_STATE_STOPPING:
+        return "BLE: Stopping";
     case BLE_SCANNER_STATE_ERROR:
         return "BLE: Error";
     default:
         return "BLE: Unknown";
+    }
+}
+
+static const char *scanner_button_text(ble_scanner_state_t state)
+{
+    switch (state) {
+    case BLE_SCANNER_STATE_SCANNING:
+        return "Stop scan";
+    case BLE_SCANNER_STATE_STOPPING:
+        return "Stopping...";
+    case BLE_SCANNER_STATE_IDLE:
+    case BLE_SCANNER_STATE_ERROR:
+    default:
+        return "Start scan";
     }
 }
 
@@ -55,16 +71,17 @@ static void update_device_list(void)
 
 static void scanner_toggle_cb(lv_event_t *event)
 {
+    ble_scanner_state_t state;
+
     if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
         return;
     }
 
-    if (ble_scanner_is_enabled()) {
+    state = ble_scanner_get_state();
+    if (state == BLE_SCANNER_STATE_SCANNING || state == BLE_SCANNER_STATE_STOPPING) {
         ble_scanner_stop();
-        lv_label_set_text(toggle_label, "Start scan");
     } else {
         ble_scanner_start();
-        lv_label_set_text(toggle_label, "Stop scan");
     }
 }
 
@@ -85,6 +102,7 @@ static void app_ui_task(void *parameter)
 
         if (event.type == DEVICE_MANAGER_EVENT_SCANNER_STATE) {
             lv_label_set_text(scanner_status_label, scanner_state_text(event.scanner_state));
+            lv_label_set_text(toggle_label, scanner_button_text(event.scanner_state));
             if (event.scanner_state == BLE_SCANNER_STATE_ERROR) {
                 lv_label_set_text_fmt(device_count_label, "Scanner error: %d", event.error_code);
             }
@@ -133,7 +151,7 @@ void app_ui_start(void)
     lv_obj_add_event_cb(button, scanner_toggle_cb, LV_EVENT_CLICKED, NULL);
 
     toggle_label = lv_label_create(button);
-    lv_label_set_text(toggle_label, "Stop scan");
+    lv_label_set_text(toggle_label, scanner_button_text(ble_scanner_get_state()));
     lv_obj_center(toggle_label);
 
     bsp_display_unlock();

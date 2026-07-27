@@ -13,6 +13,7 @@
 typedef enum {
     BLE_SCANNER_STATE_IDLE,
     BLE_SCANNER_STATE_SCANNING,
+    BLE_SCANNER_STATE_STOPPING,
     BLE_SCANNER_STATE_ERROR,
 } ble_scanner_state_t;
 
@@ -32,4 +33,5 @@ void ble_scanner_init(void);
 void ble_scanner_start(void);
 void ble_scanner_stop(void);
 bool ble_scanner_is_enabled(void);
+ble_scanner_state_t ble_scanner_get_state(void);
 QueueHandle_t ble_scanner_get_event_queue(void);
