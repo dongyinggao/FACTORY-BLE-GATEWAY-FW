@@ -1,6 +1,7 @@
 #include "csv_logger.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -15,6 +16,10 @@
 #include "gateway_config.h"
 
 static const char *TAG = "csv_logger";
+static const char *CSV_HEADER =
+    "timestamp,time_synced,event_uptime_s,broadcast_started_uptime_s,last_seen_uptime_s,"
+    "end_detected_uptime_s,gateway_id,gateway_location,device_id,device_name,mac,address_type,"
+    "event,broadcast_started_at,last_seen_at,end_detected_at,rssi,scanner_state";
 static bool sd_ready;
 
 static void csv_write_event(const device_manager_event_t *event)
@@ -22,6 +27,9 @@ static void csv_write_event(const device_manager_event_t *event)
     const gateway_config_t *config = gateway_config_get();
     char line[CSV_LIFECYCLE_LINE_MAX_LEN];
     char path[96];
+    char backup_path[96];
+    char date_name[9];
+    char header[256];
     time_t now;
     struct tm local_time;
     csv_lifecycle_event_t csv_event = {
@@ -37,11 +45,11 @@ static void csv_write_event(const device_manager_event_t *event)
     now = time(NULL);
     localtime_r(&now, &local_time);
     if (local_time.tm_year + 1900 < 2024) {
-        snprintf(path, sizeof(path), BSP_SD_MOUNT_POINT "/data/00000000.csv");
-    } else {
-        snprintf(path, sizeof(path), BSP_SD_MOUNT_POINT "/data/%04d%02d%02d.csv",
-                 local_time.tm_year + 1900, local_time.tm_mon + 1, local_time.tm_mday);
+        snprintf(date_name, sizeof(date_name), "00000000");
+    } else if (strftime(date_name, sizeof(date_name), "%Y%m%d", &local_time) == 0) {
+        snprintf(date_name, sizeof(date_name), "00000000");
     }
+    snprintf(path, sizeof(path), BSP_SD_MOUNT_POINT "/data/%s.csv", date_name);
     file = fopen(path, "a+");
 
     if (file == NULL) {
@@ -50,7 +58,28 @@ static void csv_write_event(const device_manager_event_t *event)
         return;
     }
     if (ftell(file) == 0) {
-        fputs("timestamp,time_synced,event_uptime_s,gateway_id,gateway_location,device_id,device_name,mac,address_type,event,broadcast_started_at,last_seen_at,end_detected_at,rssi,scanner_state\n", file);
+        fprintf(file, "%s\n", CSV_HEADER);
+    } else {
+        rewind(file);
+        if (fgets(header, sizeof(header), file) == NULL ||
+            strncmp(header, CSV_HEADER, strlen(CSV_HEADER)) != 0 ||
+            (header[strlen(CSV_HEADER)] != '\n' && header[strlen(CSV_HEADER)] != '\r')) {
+            fclose(file);
+            snprintf(backup_path, sizeof(backup_path), BSP_SD_MOUNT_POINT "/data/%s.OLD", date_name);
+            if (rename(path, backup_path) != 0) {
+                ESP_LOGE(TAG, "CSV schema mismatch; unable to preserve %s", path);
+                sd_ready = false;
+                return;
+            }
+            file = fopen(path, "w");
+            if (file == NULL) {
+                ESP_LOGE(TAG, "unable to create CSV file after schema migration");
+                sd_ready = false;
+                return;
+            }
+            fprintf(file, "%s\n", CSV_HEADER);
+            ESP_LOGW(TAG, "CSV schema changed; previous file saved as %s", backup_path);
+        }
     }
     if (csv_format_lifecycle_event(line, sizeof(line), &csv_event, config) < 0) {
         ESP_LOGE(TAG, "CSV record formatting failed");

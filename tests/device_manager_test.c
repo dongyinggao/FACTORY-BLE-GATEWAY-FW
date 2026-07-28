@@ -26,14 +26,16 @@ static void test_broadcast_lifecycle(void)
     report.rssi = -52;
     assert(device_registry_process_report(&registry, &report, 200, &index) == DEVICE_REGISTRY_UPDATED);
     assert(registry.devices[index].last_seen_ms == 200);
-    assert(device_registry_mark_next_broadcast_ended(&registry, 60199,
+    assert(device_registry_mark_next_broadcast_ended(&registry,
+                                                      200 + DEVICE_MANAGER_DEFAULT_BCAST_END_MS - 1,
                                                       DEVICE_MANAGER_DEFAULT_BCAST_END_MS, &index) ==
            DEVICE_REGISTRY_NO_CHANGE);
-    assert(device_registry_mark_next_broadcast_ended(&registry, 60200,
+    assert(device_registry_mark_next_broadcast_ended(&registry,
+                                                      200 + DEVICE_MANAGER_DEFAULT_BCAST_END_MS,
                                                       DEVICE_MANAGER_DEFAULT_BCAST_END_MS, &index) ==
            DEVICE_REGISTRY_BROADCAST_ENDED);
     assert(!registry.devices[index].broadcasting);
-    assert(registry.devices[index].end_detected_ms == 60200);
+    assert(registry.devices[index].end_detected_ms == 200 + DEVICE_MANAGER_DEFAULT_BCAST_END_MS);
     assert(device_registry_process_report(&registry, &report, 70000, &index) ==
            DEVICE_REGISTRY_BROADCAST_STARTED);
     assert(registry.devices[index].broadcast_started_ms == 70000);
