@@ -8,7 +8,7 @@
 
 #include "ble_types.h"
 
-#define BLE_EVENT_QUEUE_MAX_LEN 128
+#define BLE_EVENT_QUEUE_MAX_LEN 192
 
 typedef enum {
     BLE_SCANNER_STATE_IDLE,

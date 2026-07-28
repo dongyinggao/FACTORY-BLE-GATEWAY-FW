@@ -1,6 +1,7 @@
 #include "app_ui.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -10,19 +11,31 @@
 
 #include "ble_scanner.h"
 #include "csv_logger.h"
-#include "device_list_model.h"
 #include "device_manager.h"
 #include "mqtt_service.h"
 #include "network_manager.h"
 #include "outbox.h"
 #include "time_service.h"
 
+#define DEVICE_LIST_VISIBLE_ROWS 4
+
 static lv_obj_t *scanner_status_label;
 static lv_obj_t *device_count_label;
 static lv_obj_t *network_status_label;
 static lv_obj_t *device_rows[DEVICE_LIST_VISIBLE_ROWS];
 static lv_obj_t *toggle_label;
-static device_list_model_t device_list;
+typedef struct {
+    char name[BLE_DEVICE_NAME_MAX_LEN];
+    uint8_t address[6];
+    int8_t rssi;
+    bool broadcasting;
+    uint32_t sequence;
+} ui_recent_device_t;
+
+static ui_recent_device_t recent_devices[DEVICE_LIST_VISIBLE_ROWS];
+static uint16_t device_count;
+static uint16_t broadcasting_count;
+static uint32_t device_sequence;
 
 static const char *scanner_state_text(ble_scanner_state_t state)
 {
@@ -58,22 +71,51 @@ static void update_device_list(void)
 {
     lv_label_set_text_fmt(device_count_label,
                           "Devices: %u  Broadcasting: %u  SD: %s",
-                          (unsigned int)device_list_model_count(&device_list),
-                          (unsigned int)device_list_model_broadcasting_count(&device_list),
+                          (unsigned int)device_count,
+                          (unsigned int)broadcasting_count,
                           csv_logger_is_ready() ? "OK" : "ERR");
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {
-        const managed_device_t *device = device_list_model_get_ranked(&device_list, row);
-        if (device == NULL) {
+        const ui_recent_device_t *device = &recent_devices[row];
+        if (device->name[0] == '\0') {
             lv_label_set_text(device_rows[row], row == 0 ? "No matching device yet" : "");
             continue;
         }
         lv_label_set_text_fmt(device_rows[row],
                               "%s %s  %d dBm\n%02X:%02X:%02X:%02X:%02X:%02X",
-                              device->broadcasting ? "ON" : "END", device->report.name, device->report.rssi,
-                              device->report.address[5], device->report.address[4], device->report.address[3],
-                              device->report.address[2], device->report.address[1], device->report.address[0]);
+                              device->broadcasting ? "ON" : "END", device->name, device->rssi,
+                              device->address[5], device->address[4], device->address[3],
+                              device->address[2], device->address[1], device->address[0]);
     }
+}
+
+static void update_recent_device(const device_manager_ui_event_t *event)
+{
+    size_t selected = DEVICE_LIST_VISIBLE_ROWS;
+
+    for (size_t index = 0; index < DEVICE_LIST_VISIBLE_ROWS; ++index) {
+        if (memcmp(recent_devices[index].address, event->address, sizeof(event->address)) == 0 &&
+            recent_devices[index].name[0] != '\0') {
+            selected = index;
+            break;
+        }
+        if (selected == DEVICE_LIST_VISIBLE_ROWS && recent_devices[index].name[0] == '\0') {
+            selected = index;
+        }
+    }
+    if (selected == DEVICE_LIST_VISIBLE_ROWS) {
+        selected = 0;
+        for (size_t index = 1; index < DEVICE_LIST_VISIBLE_ROWS; ++index) {
+            if (recent_devices[index].sequence < recent_devices[selected].sequence) {
+                selected = index;
+            }
+        }
+    }
+    memcpy(recent_devices[selected].name, event->name, sizeof(recent_devices[selected].name));
+    memcpy(recent_devices[selected].address, event->address, sizeof(recent_devices[selected].address));
+    recent_devices[selected].rssi = event->rssi;
+    recent_devices[selected].broadcasting = event->broadcasting;
+    recent_devices[selected].sequence = ++device_sequence;
 }
 
 static void update_network_status(void)
@@ -101,8 +143,8 @@ static void scanner_toggle_cb(lv_event_t *event)
 
 static void app_ui_task(void *parameter)
 {
-    QueueHandle_t event_queue = device_manager_get_event_queue();
-    device_manager_event_t event;
+    QueueHandle_t event_queue = device_manager_get_ui_event_queue();
+    device_manager_ui_event_t event;
 
     (void)parameter;
     while (true) {
@@ -112,6 +154,10 @@ static void app_ui_task(void *parameter)
             continue;
         }
 
+        if (received == pdTRUE) {
+            device_count = event.device_count;
+            broadcasting_count = event.broadcasting_count;
+        }
         if (received == pdTRUE && event.type == DEVICE_MANAGER_EVENT_SCANNER_STATE) {
             lv_label_set_text(scanner_status_label, scanner_state_text(event.scanner_state));
             lv_label_set_text(toggle_label, scanner_button_text(event.scanner_state));
@@ -119,11 +165,8 @@ static void app_ui_task(void *parameter)
                 lv_label_set_text_fmt(device_count_label, "Scanner error: %d", event.error_code);
             }
         } else if (received == pdTRUE) {
-            if (device_list_model_apply(&device_list, &event.device) == DEVICE_LIST_FULL) {
-                lv_label_set_text(device_count_label, "Device list full");
-            } else {
-                update_device_list();
-            }
+            update_recent_device(&event);
+            update_device_list();
         }
         update_network_status();
 

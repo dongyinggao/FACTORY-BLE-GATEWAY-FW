@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_heap_caps.h"
+#include "freertos/idf_additions.h"
 #include "host/ble_gap.h"
 #include "host/ble_hs.h"
 #include "host/util/util.h"
@@ -62,12 +64,6 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
         memcpy(report.address, event->disc.addr.val, sizeof(report.address));
         report.address_type = event->disc.addr.type;
         report.rssi = event->disc.rssi;
-        report.adv_data_len = event->disc.length_data;
-        if (report.adv_data_len > BLE_ADV_DATA_MAX_LEN) {
-            report.adv_data_len = BLE_ADV_DATA_MAX_LEN;
-        }
-        memcpy(report.adv_data, event->disc.data, report.adv_data_len);
-
         ble_scanner_event_t scanner_event = {
             .type = BLE_SCANNER_EVENT_REPORT,
             .state = BLE_SCANNER_STATE_SCANNING,
@@ -78,8 +74,8 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
                  report.name,
                  report.address[5], report.address[4], report.address[3],
                  report.address[2], report.address[1], report.address[0],
-                 report.address_type, report.rssi, report.adv_data_len);
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, report.adv_data, report.adv_data_len, ESP_LOG_INFO);
+                 report.address_type, report.rssi, event->disc.length_data);
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, event->disc.data, event->disc.length_data, ESP_LOG_INFO);
         if (xQueueSend(scanner_event_queue, &scanner_event, 0) != pdTRUE) {
             ESP_LOGW(TAG, "scanner event queue full; report dropped");
         }
@@ -162,7 +158,9 @@ void ble_scanner_init(void)
 {
     int rc;
 
-    scanner_event_queue = xQueueCreate(BLE_EVENT_QUEUE_MAX_LEN, sizeof(ble_scanner_event_t));
+    scanner_event_queue = xQueueCreateWithCaps(BLE_EVENT_QUEUE_MAX_LEN,
+                                                sizeof(ble_scanner_event_t),
+                                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     configASSERT(scanner_event_queue != NULL);
     scanner_enabled = true;
 

@@ -14,11 +14,18 @@
 
 static const char *TAG = "wifi_manager";
 static bool connected;
+static bool connecting;
 static bool initialized;
 static bool task_started;
 static uint32_t applied_revision = UINT32_MAX;
 static uint32_t attempted_revision = UINT32_MAX;
 static uint32_t reconnect_delay_ms = 1000;
+static uint32_t connect_started_ms;
+
+static uint32_t network_now_ms(void)
+{
+    return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+}
 
 static void wifi_apply(void)
 {
@@ -42,6 +49,8 @@ static void wifi_apply(void)
         ESP_LOGW(TAG, "Wi-Fi connect request failed: %s", esp_err_to_name(result));
         return;
     }
+    connecting = true;
+    connect_started_ms = network_now_ms();
     ESP_LOGI(TAG, "connecting to configured Wi-Fi SSID");
 }
 
@@ -54,6 +63,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         wifi_apply();
     } else if (id == WIFI_EVENT_STA_DISCONNECTED) {
         connected = false;
+        connecting = false;
         ESP_LOGW(TAG, "Wi-Fi disconnected; reconnecting");
     }
 }
@@ -65,6 +75,7 @@ static void ip_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     (void)id;
     (void)data;
     connected = true;
+    connecting = false;
     reconnect_delay_ms = 1000;
     ESP_LOGI(TAG, "Wi-Fi connected");
     time_service_start_sync();
@@ -105,6 +116,10 @@ static bool wifi_initialize(void)
         goto failed;
     }
     initialized = true;
+    /* WIFI_EVENT_STA_START already applies the current configuration. Mark
+     * this revision as applied so the worker does not immediately disconnect
+     * a newly associated station as if a configuration change occurred. */
+    applied_revision = gateway_config_get_revision();
     return true;
 
 failed:
@@ -137,11 +152,13 @@ static void network_task(void *arg)
             wifi_apply();
         }
         if (!connected) {
-            vTaskDelay(pdMS_TO_TICKS(reconnect_delay_ms));
-            esp_wifi_connect();
-            if (reconnect_delay_ms < 30000) {
-                reconnect_delay_ms *= 2;
+            if (connecting && (uint32_t)(network_now_ms() - connect_started_ms) < 15000U) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue;
             }
+            vTaskDelay(pdMS_TO_TICKS(reconnect_delay_ms));
+            wifi_apply();
+            if (reconnect_delay_ms < 30000) reconnect_delay_ms *= 2;
         } else {
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
