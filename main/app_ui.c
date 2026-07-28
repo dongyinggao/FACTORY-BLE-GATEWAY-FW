@@ -9,6 +9,7 @@
 #include "lvgl.h"
 
 #include "ble_scanner.h"
+#include "csv_logger.h"
 #include "device_list_model.h"
 #include "device_manager.h"
 
@@ -51,9 +52,10 @@ static const char *scanner_button_text(ble_scanner_state_t state)
 static void update_device_list(void)
 {
     lv_label_set_text_fmt(device_count_label,
-                          "Devices: %u  Online: %u",
+                          "Devices: %u  Broadcasting: %u  SD: %s",
                           (unsigned int)device_list_model_count(&device_list),
-                          (unsigned int)device_list_model_online_count(&device_list));
+                          (unsigned int)device_list_model_broadcasting_count(&device_list),
+                          csv_logger_is_ready() ? "OK" : "ERR");
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {
         const managed_device_t *device = device_list_model_get_ranked(&device_list, row);
@@ -63,7 +65,7 @@ static void update_device_list(void)
         }
         lv_label_set_text_fmt(device_rows[row],
                               "%s %s  %d dBm\n%02X:%02X:%02X:%02X:%02X:%02X",
-                              device->online ? "ON" : "OFF", device->report.name, device->report.rssi,
+                              device->broadcasting ? "ON" : "END", device->report.name, device->report.rssi,
                               device->report.address[5], device->report.address[4], device->report.address[3],
                               device->report.address[2], device->report.address[1], device->report.address[0]);
     }
@@ -134,7 +136,7 @@ void app_ui_start(void)
     lv_obj_align(scanner_status_label, LV_ALIGN_TOP_MID, 0, 35);
 
     device_count_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(device_count_label, "Devices: 0  Online: 0");
+    lv_label_set_text(device_count_label, "Devices: 0  Broadcasting: 0  SD: Initializing");
     lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 55);
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {

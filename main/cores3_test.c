@@ -2,7 +2,9 @@
 
 #include "app_ui.h"
 #include "ble_scanner.h"
+#include "csv_logger.h"
 #include "device_manager.h"
+#include "gateway_config.h"
 
 void app_main(void)
 {
@@ -13,7 +15,10 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(result);
 
+    gateway_config_init();
+    gateway_config_console_start();
     ble_scanner_init();
     device_manager_init();
+    csv_logger_start();
     app_ui_start();
 }
