@@ -5,6 +5,10 @@
 #include "csv_logger.h"
 #include "device_manager.h"
 #include "gateway_config.h"
+#include "gateway_publisher.h"
+#include "mqtt_service.h"
+#include "network_manager.h"
+#include "time_service.h"
 
 void app_main(void)
 {
@@ -17,8 +21,12 @@ void app_main(void)
 
     gateway_config_init();
     gateway_config_console_start();
+    time_service_init();
     ble_scanner_init();
     device_manager_init();
     csv_logger_start();
     app_ui_start();
+    network_manager_start();
+    mqtt_service_start();
+    gateway_publisher_start();
 }

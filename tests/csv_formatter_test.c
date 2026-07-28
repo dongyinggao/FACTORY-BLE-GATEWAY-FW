@@ -36,7 +36,7 @@ static void test_started_record_and_escaping(void)
     assert(csv_format_lifecycle_event(line, sizeof(line), &event, &config) > 0);
     assert(strstr(line, ",false,22,22,45,,\"GW-01\",\"Room,\"\"North\"\"\",") != NULL);
     assert(strstr(line, "\"AA:BB:CC:DD:EE:FF\",\"SM_ICM2\"") != NULL);
-    assert(strstr(line, ",BROADCAST_STARTED,,,,-55,SCANNING\n") != NULL);
+    assert(strstr(line, ",BROADCAST_STARTED,\"\",\"\",\"\",-55,SCANNING\n") != NULL);
 }
 
 static void test_ended_record_uses_end_detection_uptime(void)
@@ -47,7 +47,7 @@ static void test_ended_record_uses_end_detection_uptime(void)
 
     assert(csv_format_lifecycle_event(line, sizeof(line), &event, &config) > 0);
     assert(strstr(line, ",false,105,22,45,105,") != NULL);
-    assert(strstr(line, ",BROADCAST_ENDED,,,,-55,SCANNING\n") != NULL);
+    assert(strstr(line, ",BROADCAST_ENDED,\"\",\"\",\"\",-55,SCANNING\n") != NULL);
     assert(csv_format_lifecycle_event(line, 8, &event, &config) < 0);
 }
 
