@@ -52,6 +52,7 @@ int csv_format_lifecycle_event(char *output, size_t output_size,
     const managed_device_t *device;
     const char *event_name;
     uint32_t uptime_s;
+    uint32_t end_detected_uptime_s;
     size_t used = 0;
 
     if (output == NULL || output_size == 0 || event == NULL || config == NULL ||
@@ -64,7 +65,16 @@ int csv_format_lifecycle_event(char *output, size_t output_size,
                      "BROADCAST_STARTED" : "BROADCAST_ENDED";
     uptime_s = (event->type == CSV_LIFECYCLE_BROADCAST_STARTED ?
                     device->broadcast_started_ms : device->end_detected_ms) / 1000U;
-    if (!append_format(output, output_size, &used, ",false,%lu,", (unsigned long)uptime_s) ||
+    end_detected_uptime_s = event->type == CSV_LIFECYCLE_BROADCAST_ENDED ?
+                                 device->end_detected_ms / 1000U : 0;
+    if (!append_format(output, output_size, &used, ",false,%lu,%lu,%lu,",
+                       (unsigned long)uptime_s,
+                       (unsigned long)(device->broadcast_started_ms / 1000U),
+                       (unsigned long)(device->last_seen_ms / 1000U)) ||
+        (end_detected_uptime_s != 0 &&
+         !append_format(output, output_size, &used, "%lu,",
+                        (unsigned long)end_detected_uptime_s)) ||
+        (end_detected_uptime_s == 0 && !append_text(output, output_size, &used, ",")) ||
         !append_quoted(output, output_size, &used, config->gateway_id) ||
         !append_text(output, output_size, &used, ",") ||
         !append_quoted(output, output_size, &used, config->gateway_location) ||
