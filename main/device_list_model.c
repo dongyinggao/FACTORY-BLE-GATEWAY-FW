@@ -4,14 +4,13 @@
 
 static bool device_list_same_address(const managed_device_t *left, const managed_device_t *right)
 {
-    return left->report.address_type == right->report.address_type &&
-           memcmp(left->report.address, right->report.address, sizeof(left->report.address)) == 0;
+    return memcmp(left->report.address, right->report.address, sizeof(left->report.address)) == 0;
 }
 
 static bool device_list_is_better(const managed_device_t *candidate, const managed_device_t *current)
 {
-    if (candidate->online != current->online) {
-        return candidate->online;
+    if (candidate->broadcasting != current->broadcasting) {
+        return candidate->broadcasting;
     }
     return (int32_t)(candidate->last_seen_ms - current->last_seen_ms) > 0;
 }
@@ -47,12 +46,12 @@ size_t device_list_model_count(const device_list_model_t *model)
     return count;
 }
 
-size_t device_list_model_online_count(const device_list_model_t *model)
+size_t device_list_model_broadcasting_count(const device_list_model_t *model)
 {
     size_t count = 0;
 
     for (size_t index = 0; index < DEVICE_MANAGER_MAX_DEVICES; ++index) {
-        if (model->devices[index].report.name[0] != '\0' && model->devices[index].online) {
+        if (model->devices[index].report.name[0] != '\0' && model->devices[index].broadcasting) {
             ++count;
         }
     }

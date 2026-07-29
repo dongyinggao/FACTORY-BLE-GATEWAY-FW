@@ -18,5 +18,5 @@ typedef enum {
 
 device_list_result_t device_list_model_apply(device_list_model_t *model, const managed_device_t *device);
 size_t device_list_model_count(const device_list_model_t *model);
-size_t device_list_model_online_count(const device_list_model_t *model);
+size_t device_list_model_broadcasting_count(const device_list_model_t *model);
 const managed_device_t *device_list_model_get_ranked(const device_list_model_t *model, size_t rank);

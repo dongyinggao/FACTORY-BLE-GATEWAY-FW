@@ -4,8 +4,7 @@
 
 static bool registry_same_address(const managed_device_t *device, const ble_scan_report_t *report)
 {
-    return device->report.address_type == report->address_type &&
-           memcmp(device->report.address, report->address, sizeof(report->address)) == 0;
+    return memcmp(device->report.address, report->address, sizeof(report->address)) == 0;
 }
 
 static int registry_find_device(const device_registry_t *registry, const ble_scan_report_t *report)
@@ -35,7 +34,7 @@ device_registry_result_t device_registry_process_report(device_registry_t *regis
                                                         size_t *device_index)
 {
     int index = registry_find_device(registry, report);
-    bool was_online;
+    bool was_broadcasting;
 
     if (index < 0) {
         index = registry_find_empty_slot(registry);
@@ -43,7 +42,8 @@ device_registry_result_t device_registry_process_report(device_registry_t *regis
             return DEVICE_REGISTRY_FULL;
         }
         registry->devices[index].report = *report;
-        registry->devices[index].online = true;
+        registry->devices[index].broadcasting = true;
+        registry->devices[index].broadcast_started_ms = now_ms;
         registry->devices[index].last_seen_ms = now_ms;
         if (device_index != NULL) {
             *device_index = (size_t)index;
@@ -51,29 +51,35 @@ device_registry_result_t device_registry_process_report(device_registry_t *regis
         return DEVICE_REGISTRY_ADDED;
     }
 
-    was_online = registry->devices[index].online;
+    was_broadcasting = registry->devices[index].broadcasting;
     registry->devices[index].report = *report;
-    registry->devices[index].online = true;
+    registry->devices[index].broadcasting = true;
+    if (!was_broadcasting) {
+        registry->devices[index].broadcast_started_ms = now_ms;
+        registry->devices[index].end_detected_ms = 0;
+    }
     registry->devices[index].last_seen_ms = now_ms;
     if (device_index != NULL) {
         *device_index = (size_t)index;
     }
-    return was_online ? DEVICE_REGISTRY_UPDATED : DEVICE_REGISTRY_ONLINE;
+    return was_broadcasting ? DEVICE_REGISTRY_UPDATED : DEVICE_REGISTRY_BROADCAST_STARTED;
 }
 
-device_registry_result_t device_registry_mark_next_offline(device_registry_t *registry,
-                                                            uint32_t now_ms,
-                                                            size_t *device_index)
+device_registry_result_t device_registry_mark_next_broadcast_ended(device_registry_t *registry,
+                                                                    uint32_t now_ms,
+                                                                    uint32_t timeout_ms,
+                                                                    size_t *device_index)
 {
     for (int index = 0; index < DEVICE_MANAGER_MAX_DEVICES; ++index) {
         managed_device_t *device = &registry->devices[index];
-        if (device->report.name[0] != '\0' && device->online &&
-            (uint32_t)(now_ms - device->last_seen_ms) >= DEVICE_MANAGER_OFFLINE_TIMEOUT_MS) {
-            device->online = false;
+        if (device->report.name[0] != '\0' && device->broadcasting &&
+            (uint32_t)(now_ms - device->last_seen_ms) >= timeout_ms) {
+            device->broadcasting = false;
+            device->end_detected_ms = now_ms;
             if (device_index != NULL) {
                 *device_index = (size_t)index;
             }
-            return DEVICE_REGISTRY_OFFLINE;
+            return DEVICE_REGISTRY_BROADCAST_ENDED;
         }
     }
     return DEVICE_REGISTRY_NO_CHANGE;

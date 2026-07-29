@@ -6,23 +6,26 @@
 
 static void test_name_filter(void)
 {
-    assert(device_filter_name_matches("ICD001"));
-    assert(device_filter_name_matches("ICM_A01"));
+    assert(device_filter_name_matches("SM_ICM2"));
+    assert(device_filter_name_matches("SM_iCM2"));
+    assert(device_filter_name_matches("sm_icd123"));
     assert(!device_filter_name_matches(NULL));
     assert(!device_filter_name_matches(""));
-    assert(!device_filter_name_matches("IC"));
-    assert(!device_filter_name_matches("ICX001"));
-    assert(!device_filter_name_matches("XICD001"));
+    assert(!device_filter_name_matches("SM_ICM"));
+    assert(!device_filter_name_matches("SM_ICM_A01"));
+    assert(!device_filter_name_matches("SM_ICX001"));
+    assert(!device_filter_name_matches("XSM_ICM2"));
+    assert(!device_filter_name_matches("SM_ICM2X"));
 }
 
 static void test_name_copy(void)
 {
     char name[BLE_DEVICE_NAME_MAX_LEN];
-    const uint8_t source[] = "ICD001";
-    const uint8_t long_name[] = "ICM_abcdefghijklmnopqrstuvwxyz0123456789";
+    const uint8_t source[] = "SM_ICM2";
+    const uint8_t long_name[] = "SM_ICMabcdefghijklmnopqrstuvwxyz0123456789";
 
     device_filter_copy_name(name, source, sizeof(source) - 1);
-    assert(strcmp(name, "ICD001") == 0);
+    assert(strcmp(name, "SM_ICM2") == 0);
 
     device_filter_copy_name(name, long_name, sizeof(long_name) - 1);
     assert(name[BLE_DEVICE_NAME_MAX_LEN - 1] == '\0');

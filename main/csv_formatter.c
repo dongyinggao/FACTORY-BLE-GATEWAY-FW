@@ -1,0 +1,85 @@
+#include "csv_formatter.h"
+
+#include <stdarg.h>
+#include <stdio.h>
+
+static bool append_text(char *output, size_t output_size, size_t *used, const char *text)
+{
+    int written = snprintf(output + *used, output_size - *used, "%s", text);
+
+    if (written < 0 || (size_t)written >= output_size - *used) {
+        return false;
+    }
+    *used += (size_t)written;
+    return true;
+}
+
+static bool append_format(char *output, size_t output_size, size_t *used, const char *format, ...)
+{
+    va_list arguments;
+    int written;
+
+    va_start(arguments, format);
+    written = vsnprintf(output + *used, output_size - *used, format, arguments);
+    va_end(arguments);
+    if (written < 0 || (size_t)written >= output_size - *used) {
+        return false;
+    }
+    *used += (size_t)written;
+    return true;
+}
+
+static bool append_quoted(char *output, size_t output_size, size_t *used, const char *text)
+{
+    if (!append_text(output, output_size, used, "\"")) {
+        return false;
+    }
+    for (; text != NULL && *text != '\0'; ++text) {
+        if (*text == '"' && !append_text(output, output_size, used, "\"")) {
+            return false;
+        }
+        if (!append_format(output, output_size, used, "%c", *text)) {
+            return false;
+        }
+    }
+    return append_text(output, output_size, used, "\"");
+}
+
+int csv_format_lifecycle_event(char *output, size_t output_size,
+                               const csv_lifecycle_event_t *event,
+                               const gateway_config_t *config)
+{
+    const managed_device_t *device;
+    const char *event_name;
+    uint32_t uptime_s;
+    size_t used = 0;
+
+    if (output == NULL || output_size == 0 || event == NULL || config == NULL ||
+        (event->type != CSV_LIFECYCLE_BROADCAST_STARTED &&
+         event->type != CSV_LIFECYCLE_BROADCAST_ENDED)) {
+        return -1;
+    }
+    device = &event->device;
+    event_name = event->type == CSV_LIFECYCLE_BROADCAST_STARTED ?
+                     "BROADCAST_STARTED" : "BROADCAST_ENDED";
+    uptime_s = (event->type == CSV_LIFECYCLE_BROADCAST_STARTED ?
+                    device->broadcast_started_ms : device->end_detected_ms) / 1000U;
+    if (!append_format(output, output_size, &used, ",false,%lu,", (unsigned long)uptime_s) ||
+        !append_quoted(output, output_size, &used, config->gateway_id) ||
+        !append_text(output, output_size, &used, ",") ||
+        !append_quoted(output, output_size, &used, config->gateway_location) ||
+        !append_format(output, output_size, &used, ",\"%02X:%02X:%02X:%02X:%02X:%02X\",",
+                       device->report.address[5], device->report.address[4],
+                       device->report.address[3], device->report.address[2],
+                       device->report.address[1], device->report.address[0]) ||
+        !append_quoted(output, output_size, &used, device->report.name) ||
+        !append_format(output, output_size, &used,
+                       ",\"%02X:%02X:%02X:%02X:%02X:%02X\",%u,%s,,,,%d,SCANNING\n",
+                       device->report.address[5], device->report.address[4],
+                       device->report.address[3], device->report.address[2],
+                       device->report.address[1], device->report.address[0],
+                       device->report.address_type, event_name, device->report.rssi)) {
+        return -1;
+    }
+    return (int)used;
+}
