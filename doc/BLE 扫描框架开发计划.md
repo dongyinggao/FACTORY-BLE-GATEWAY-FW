@@ -29,3 +29,23 @@
 - 扫描以连续的 5 秒会话循环运行；在线/离线的 60 秒判定留给下一阶段设备管理器。
 - 首版只依据设备名称过滤 `ICD*` 与 `ICM*`，不解析厂商数据或连接设备。
 - 无硬件期间不执行烧录、真实 BLE 验证或 RSSI 校准。
+
+
+## 建议开发顺序是：
+
+ble_scanner
+    ↓
+device_manager
+    ↓
+online/offline state machine
+    ↓
+UI device list
+    ↓
+Wi‑Fi provisioning
+    ↓
+MQTT publishing
+
+
+关于单元测试：
+有硬件后：使用 pytest-embedded-idf 执行串口集成测试
+CI：先运行主机单元测试和 idf.py build，硬件测试作为带实际设备的专用 Job
