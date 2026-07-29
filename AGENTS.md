@@ -7,6 +7,11 @@ CoreS3-SE BLE gateway. Application code belongs in `main/`; register every
 new `.c` source in `main/CMakeLists.txt`. Keep a module's public API in a
 same-named header, for example `device_manager.c` and `device_manager.h`.
 
+Organize source by responsibility: `main/app/` contains the entry point and
+LVGL UI, `main/ble/` scanning and name filtering, `main/device/` lifecycle
+management, `main/storage/` CSV and Outbox, `main/config/` NVS configuration,
+and `main/network/` Wi-Fi, SNTP, MQTT, and publishing.
+
 `ble_scanner` owns NimBLE scanning, `device_filter` contains hardware-free
 advertisement-name filtering, `device_manager` owns deduplication and device
 state, and `app_ui` is the only module that updates LVGL. `tests/` contains
