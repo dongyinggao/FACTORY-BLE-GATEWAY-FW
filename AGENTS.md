@@ -13,7 +13,7 @@ state, and `app_ui` is the only module that updates LVGL. `tests/` contains
 host-side C tests. `partitions/v1/16m.csv` is the 16 MiB flash layout.
 Configuration defaults live in `sdkconfig.defaults`; do not edit generated
 files under `build/` or managed dependencies under `managed_components/`.
-Planning and hardware notes are in `ai/`.
+Planning and hardware notes are in `doc/`.
 
 ## Build, Test, and Development Commands
 

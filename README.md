@@ -1,53 +1,112 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | Linux |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | ----- |
+# 厂内产品状态监控蓝牙网关
 
-# Hello World Example
+本项目是基于 ESP32-S3 M5Stack CoreS3-SE 的 BLE 网关固件，用于采集
+`SM_ICM数字` / `SM_ICD数字` 设备的广播生命周期，并通过 SD 卡和 MQTT
+保存、上传数据。
 
-Starts a FreeRTOS task to print "Hello World".
+当前固件已经实现：
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+- NimBLE 主动扫描，按设备名称过滤有效广播；
+- 以设备 MAC 地址识别设备，记录广播开始、最后一次广播和结束判定时间；
+- 128 台设备容量管理；
+- SD 卡 CSV 持久化和断网 Outbox；
+- Wi-Fi STA、SNTP 校时、MQTT QoS 1 上报与 PUBACK 确认；
+- CoreS3-SE LCD 状态显示和触摸启停扫描；
+- USB Serial/JTAG `esp_console` 配置并保存到 NVS。
 
-## How to use example
+## 开发环境
 
-Follow detailed instructions provided specifically for this example.
+| 项目 | 要求 |
+| --- | --- |
+| 硬件 | M5Stack CoreS3-SE（ESP32-S3，8 MB PSRAM，16 MB Flash） |
+| ESP-IDF | v5.5.5 |
+| Python | 使用 ESP-IDF v5.5.5 的虚拟环境 |
+| BSP | `espressif/m5stack_core_s3` v4.0.0 |
 
-Select the instructions depending on Espressif chip installed on your development board:
+Linux 环境安装 ESP-IDF 可参考[官方指南](https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/get-started/linux-setup.html)。
 
-- [ESP32 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/stable/get-started/index.html)
-- [ESP32-S2 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/get-started/index.html)
+## 获取代码与添加 BSP
 
-
-## Example folder contents
-
-The project **hello_world** contains one source file in C language [hello_world_main.c](main/hello_world_main.c). The file is located in folder [main](main).
-
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt` files that provide set of directives and instructions describing the project's source files and targets (executable, library, or both).
-
-Below is short explanation of remaining files in the project folder.
-
+```bash
+git clone <repository-url>
+cd BLEGateway
+source /home/sm-dawn/.espressif/v5.5.5/esp-idf/export.sh
+idf.py add-dependency "espressif/m5stack_core_s3^4.0.0"
 ```
-├── CMakeLists.txt
-├── pytest_hello_world.py      Python script used for automated testing
-├── main
-│   ├── CMakeLists.txt
-│   └── hello_world_main.c
-└── README.md                  This is the file you are currently reading
+
+依赖信息保存在 `main/idf_component.yml` 和 `dependencies.lock` 中。
+
+## 构建、烧录与监视
+
+```bash
+source /you-idf-path/.espressif/v5.5.5/esp-idf/export.sh
+idf.py build
+idf.py -p /dev/ttyACM0 flash monitor
 ```
 
-For more information on structure and contents of ESP-IDF projects, please refer to Section [Build System](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html) of the ESP-IDF Programming Guide.
+Windows 请将端口替换为实际的 `COM` 端口，例如 `COM5`。USB Serial/JTAG
+控制台的波特率为 115200。Linux 用户若遇到串口权限错误，请将当前用户加入
+`dialout` 组后重新登录。
 
-## Troubleshooting
+## USB 配置命令
 
-* Program upload failure
+设备启动后可在 `esp>` 提示符下配置参数。密码不会在 `cfg show` 中显示。
 
-    * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
-    * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
+```text
+cfg set gateway_id GW-01
+cfg set gateway_loc Room101-North
+cfg set bcast_end_s 60
+cfg set wifi_ssid Factory-IoT
+cfg set wifi_password <password>
+cfg set mqtt_uri mqtt://192.168.20.223:1883
+cfg set mqtt_qos 1
+cfg set ntp_server ntp.aliyun.com
+cfg commit
+cfg show
+```
 
-## Technical support and feedback
+`bcast_end_s` 范围为 5～300 秒，默认 40 秒；它表示最后一个有效广播包后，
+网关等待多久才生成 `BROADCAST_ENDED`。MQTT 主题为：
 
-Please use the following feedback channels:
+```text
+factory/product-status/gateway/<gateway_id>/events
+```
 
-* For technical queries, go to the [esp32.com](https://esp32.com/) forum
-* For a feature request or bug report, create a [GitHub issue](https://github.com/espressif/esp-idf/issues)
+## 主机单元测试
 
-We will get back to you as soon as possible.
+无需硬件即可运行纯逻辑测试：
+
+```bash
+./tests/run_host_tests.sh
+```
+
+测试覆盖设备名称过滤、广播生命周期、CSV/JSON 编码和设备容量边界。
+
+## 项目结构
+
+```text
+main/                  固件模块
+tests/                 主机侧单元测试
+partitions/v1/16m.csv  16 MB Flash 分区表
+doc/                   方案、开发计划、会议纪要和模块设计文档
+sdkconfig.defaults     配置默认值
+```
+
+主要模块：`ble_scanner`（扫描）、`device_filter`（名称过滤）、
+`device_manager`（设备生命周期）、`csv_logger`（SD CSV）、`outbox`（断网缓存）、
+`network_manager`（Wi-Fi）、`mqtt_service`（MQTT）、`gateway_publisher`（消息发布）
+和 `app_ui`（LCD/Touch）。NimBLE 回调不直接操作 LVGL，UI 更新统一在应用任务中完成。
+
+## 相关文档
+
+- [厂内产品状态监控蓝牙网关方案](doc/厂内产品状态监控蓝牙网关方案.md)
+- [项目进展与模块化设计](doc/项目进展与模块化设计.md)
+- [BLE 扫描框架开发计划](doc/BLE 扫描框架开发计划.md)
+- [厂内产品状态监控蓝牙网关方案评审会议纪要](doc/厂内产品状态监控蓝牙网关方案评审会议纪要.md)
+- [M5Stack CoreS3 BSP 文档](https://docs.m5stack.com/zh_CN/esp_idf/m5cores3/bsp)
+- [ESP-IDF 编程指南](https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/)
+
+## 当前限制
+
+OTA、MQTT TLS 证书校验、云端下行控制和多网关协同尚未纳入当前固件交付范围。
+现场交付前仍需完成 128 台设备并发广播、断网 Outbox 重传和长时间运行验证。
