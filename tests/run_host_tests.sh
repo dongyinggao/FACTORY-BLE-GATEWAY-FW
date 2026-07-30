@@ -11,32 +11,40 @@ cleanup() {
 }
 trap cleanup EXIT
 
-COMMON_FLAGS=(-std=c99 -Wall -Wextra -Werror -I "${PROJECT_DIR}/main")
+COMMON_FLAGS=(
+    -std=c99 -Wall -Wextra -Werror
+    -I "${PROJECT_DIR}/main/app"
+    -I "${PROJECT_DIR}/main/ble"
+    -I "${PROJECT_DIR}/main/device"
+    -I "${PROJECT_DIR}/main/storage"
+    -I "${PROJECT_DIR}/main/config"
+    -I "${PROJECT_DIR}/main/network"
+)
 
 echo "[1/5] device_filter"
 "${CC}" "${COMMON_FLAGS[@]}" \
-    "${PROJECT_DIR}/main/device_filter.c" \
+    "${PROJECT_DIR}/main/ble/device_filter.c" \
     "${TEST_DIR}/device_filter_test.c" \
     -o "${BUILD_DIR}/device_filter_test"
 "${BUILD_DIR}/device_filter_test"
 
 echo "[2/5] device_manager_core"
 "${CC}" "${COMMON_FLAGS[@]}" \
-    "${PROJECT_DIR}/main/device_manager_core.c" \
+    "${PROJECT_DIR}/main/device/device_manager_core.c" \
     "${TEST_DIR}/device_manager_test.c" \
     -o "${BUILD_DIR}/device_manager_test"
 "${BUILD_DIR}/device_manager_test"
 
 echo "[3/5] device_list_model"
 "${CC}" "${COMMON_FLAGS[@]}" \
-    "${PROJECT_DIR}/main/device_list_model.c" \
+    "${PROJECT_DIR}/main/device/device_list_model.c" \
     "${TEST_DIR}/device_list_model_test.c" \
     -o "${BUILD_DIR}/device_list_model_test"
 "${BUILD_DIR}/device_list_model_test"
 
 echo "[4/5] csv_formatter"
 "${CC}" "${COMMON_FLAGS[@]}" \
-    "${PROJECT_DIR}/main/csv_formatter.c" \
+    "${PROJECT_DIR}/main/storage/csv_formatter.c" \
     "${TEST_DIR}/time_service_stub.c" \
     "${TEST_DIR}/csv_formatter_test.c" \
     -o "${BUILD_DIR}/csv_formatter_test"
@@ -44,7 +52,7 @@ echo "[4/5] csv_formatter"
 
 echo "[5/5] event_json"
 "${CC}" "${COMMON_FLAGS[@]}" \
-    "${PROJECT_DIR}/main/event_json.c" \
+    "${PROJECT_DIR}/main/network/event_json.c" \
     "${TEST_DIR}/event_json_test.c" \
     -o "${BUILD_DIR}/event_json_test"
 "${BUILD_DIR}/event_json_test"

@@ -1,3 +1,18 @@
-idf_component_register(SRCS "csv_formatter.c" "csv_logger.c" "gateway_config.c" "time_service.c" "network_manager.c" "mqtt_service.c" "outbox.c" "event_json.c" "gateway_publisher.c" "cores3_test.c" "app_ui.c" "ble_scanner.c" "device_filter.c" "device_manager.c" "device_manager_core.c"
+idf_component_register(SRCS
+                       "app/app_main.c"
+                       "app/app_ui.c"
+                       "ble/ble_scanner.c"
+                       "ble/device_filter.c"
+                       "device/device_manager.c"
+                       "device/device_manager_core.c"
+                       "storage/csv_formatter.c"
+                       "storage/csv_logger.c"
+                       "storage/outbox.c"
+                       "config/gateway_config.c"
+                       "network/event_json.c"
+                       "network/gateway_publisher.c"
+                       "network/mqtt_service.c"
+                       "network/network_manager.c"
+                       "network/time_service.c"
                        PRIV_REQUIRES bt nvs_flash m5stack_core_s3 esp_wifi esp_netif esp_event console mqtt esp_timer
-                       INCLUDE_DIRS "")
+                       INCLUDE_DIRS "app" "ble" "device" "storage" "config" "network")

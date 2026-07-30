@@ -55,7 +55,7 @@ Windows 请将端口替换为实际的 `COM` 端口，例如 `COM5`。USB Serial
 ```text
 cfg set gateway_id GW-01
 cfg set gateway_loc Room101-North
-cfg set bcast_end_s 60
+cfg set bcast_end_s 5
 cfg set wifi_ssid Factory-IoT
 cfg set wifi_password <password>
 cfg set mqtt_uri mqtt://192.168.20.223:1883
@@ -85,7 +85,12 @@ factory/product-status/gateway/<gateway_id>/events
 ## 项目结构
 
 ```text
-main/                  固件模块
+main/app/              应用入口、LCD 和 Touch UI
+main/ble/              NimBLE 扫描和名称过滤
+main/device/           设备表与广播生命周期
+main/storage/          CSV 日志与 SD Outbox
+main/config/           NVS 与 USB 串口配置
+main/network/          Wi-Fi、SNTP、MQTT 和发布器
 tests/                 主机侧单元测试
 partitions/v1/16m.csv  16 MB Flash 分区表
 doc/                   方案、开发计划、会议纪要和模块设计文档
