@@ -18,6 +18,7 @@
 #include "time_service.h"
 
 #define DEVICE_LIST_VISIBLE_ROWS 4
+#define APP_UI_MIN_REFRESH_MS 250U
 
 static lv_obj_t *scanner_status_label;
 static lv_obj_t *device_count_label;
@@ -36,6 +37,8 @@ static ui_recent_device_t recent_devices[DEVICE_LIST_VISIBLE_ROWS];
 static uint16_t device_count;
 static uint16_t broadcasting_count;
 static uint32_t device_sequence;
+static ble_scanner_state_t displayed_scanner_state = BLE_SCANNER_STATE_IDLE;
+static int displayed_scanner_error;
 
 static const char *scanner_state_text(ble_scanner_state_t state)
 {
@@ -142,42 +145,80 @@ static void scanner_toggle_cb(lv_event_t *event)
     }
 }
 
+static void app_ui_render(void)
+{
+    if (!bsp_display_lock(100)) {
+        return;
+    }
+
+    lv_label_set_text(scanner_status_label, scanner_state_text(displayed_scanner_state));
+    lv_label_set_text(toggle_label, scanner_button_text(displayed_scanner_state));
+    if (displayed_scanner_state == BLE_SCANNER_STATE_ERROR) {
+        lv_label_set_text_fmt(device_count_label, "Scanner error: %d", displayed_scanner_error);
+    } else {
+        update_device_list();
+    }
+    update_network_status();
+
+    bsp_display_unlock();
+}
+
+static bool app_ui_apply_event(const device_manager_ui_event_t *event)
+{
+    if (event->type != DEVICE_MANAGER_EVENT_STATUS_CHANGED) {
+        device_count = event->device_count;
+        broadcasting_count = event->broadcasting_count;
+    }
+    if (event->type == DEVICE_MANAGER_EVENT_DEVICE_CHANGED) {
+        update_recent_device(event);
+    }
+    if (event->type == DEVICE_MANAGER_EVENT_SCANNER_STATE) {
+        displayed_scanner_state = event->scanner_state;
+        displayed_scanner_error = event->error_code;
+        return true;
+    }
+    return false;
+}
+
 static void app_ui_task(void *parameter)
 {
     QueueHandle_t event_queue = device_manager_get_ui_event_queue();
     device_manager_ui_event_t event;
+    TickType_t last_render_tick = xTaskGetTickCount();
+    bool render_pending = false;
 
     (void)parameter;
     while (true) {
-        if (xQueueReceive(event_queue, &event, portMAX_DELAY) != pdTRUE) {
+        TickType_t timeout = portMAX_DELAY;
+        TickType_t now = xTaskGetTickCount();
+
+        if (render_pending) {
+            TickType_t elapsed = now - last_render_tick;
+            timeout = elapsed >= pdMS_TO_TICKS(APP_UI_MIN_REFRESH_MS) ? 0U :
+                      pdMS_TO_TICKS(APP_UI_MIN_REFRESH_MS) - elapsed;
+        }
+
+        if (xQueueReceive(event_queue, &event, timeout) != pdTRUE) {
+            if (render_pending) {
+                app_ui_render();
+                last_render_tick = xTaskGetTickCount();
+                render_pending = false;
+            }
             continue;
         }
 
-        if (!bsp_display_lock(100)) {
+        if (app_ui_apply_event(&event)) {
+            app_ui_render();
+            last_render_tick = xTaskGetTickCount();
+            render_pending = false;
             continue;
         }
-
-        if (event.type != DEVICE_MANAGER_EVENT_STATUS_CHANGED) {
-            device_count = event.device_count;
-            broadcasting_count = event.broadcasting_count;
+        render_pending = true;
+        if (xTaskGetTickCount() - last_render_tick >= pdMS_TO_TICKS(APP_UI_MIN_REFRESH_MS)) {
+            app_ui_render();
+            last_render_tick = xTaskGetTickCount();
+            render_pending = false;
         }
-        if (event.type == DEVICE_MANAGER_EVENT_SCANNER_STATE) {
-            lv_label_set_text(scanner_status_label, scanner_state_text(event.scanner_state));
-            lv_label_set_text(toggle_label, scanner_button_text(event.scanner_state));
-            if (event.scanner_state == BLE_SCANNER_STATE_ERROR) {
-                lv_label_set_text_fmt(device_count_label, "Scanner error: %d", event.error_code);
-            } else {
-                update_device_list();
-            }
-        } else {
-            if (event.type == DEVICE_MANAGER_EVENT_DEVICE_CHANGED) {
-                update_recent_device(&event);
-            }
-            update_device_list();
-        }
-        update_network_status();
-
-        bsp_display_unlock();
     }
 }
 
@@ -193,7 +234,8 @@ void app_ui_start(void)
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
 
     scanner_status_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(scanner_status_label, "BLE: Initializing");
+    displayed_scanner_state = ble_scanner_get_state();
+    lv_label_set_text(scanner_status_label, scanner_state_text(displayed_scanner_state));
     lv_obj_align(scanner_status_label, LV_ALIGN_TOP_MID, 0, 35);
 
     device_count_label = lv_label_create(lv_scr_act());
@@ -219,7 +261,7 @@ void app_ui_start(void)
     lv_obj_add_event_cb(button, scanner_toggle_cb, LV_EVENT_CLICKED, NULL);
 
     toggle_label = lv_label_create(button);
-    lv_label_set_text(toggle_label, scanner_button_text(ble_scanner_get_state()));
+    lv_label_set_text(toggle_label, scanner_button_text(displayed_scanner_state));
     lv_obj_center(toggle_label);
 
     bsp_display_unlock();

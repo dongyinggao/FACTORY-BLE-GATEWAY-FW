@@ -80,8 +80,15 @@ static void print_status(void)
              (unsigned int)device_manager_capture_queue_depth(),
              (unsigned int)device_manager_upload_queue_depth());
     print_status_row("Queue depth", value);
-    snprintf(value, sizeof(value), "scan=%lu, capture=%lu, upload=%lu",
+    snprintf(value, sizeof(value), "scan=%lu, ui=%lu, capture=%lu, upload=%lu",
+             (unsigned long)ble_scanner_event_queue_high_watermark(),
+             (unsigned long)device_manager_ui_queue_high_watermark(),
+             (unsigned long)device_manager_capture_queue_high_watermark(),
+             (unsigned long)device_manager_upload_queue_high_watermark());
+    print_status_row("Queue high water", value);
+    snprintf(value, sizeof(value), "scan=%lu, ui=%lu, capture=%lu, upload=%lu",
              (unsigned long)ble_scanner_report_drop_count(),
+             (unsigned long)device_manager_ui_drop_count(),
              (unsigned long)device_manager_capture_drop_count(),
              (unsigned long)device_manager_upload_drop_count());
     print_status_row("Dropped events", value);

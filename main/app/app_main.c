@@ -9,6 +9,7 @@
 #include "mqtt_service.h"
 #include "network_manager.h"
 #include "storage_manager.h"
+#include "stress_console.h"
 #include "system_console.h"
 #include "time_service.h"
 
@@ -24,6 +25,7 @@ void app_main(void)
     gateway_config_init();
     gateway_config_console_start();
     system_console_register();
+    stress_console_register();
     time_service_init();
     ble_scanner_init();
     device_manager_init();

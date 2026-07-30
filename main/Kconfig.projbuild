@@ -10,4 +10,12 @@ config BLE_GATEWAY_SYS_TASKS_ENABLED
         point-in-time task, CPU share, and stack high-water-mark snapshot for
         field diagnostics. Keep this disabled in the normal release build.
 
+config BLE_GATEWAY_STRESS_TEST_ENABLED
+    bool "Enable the stress console command"
+    default n
+    help
+        Enables the `stress` command, which injects synthetic BLE reports into
+        the same queue used by the scanner. It intentionally creates test CSV
+        and MQTT events, so enable it only in a diagnostic firmware build.
+
 endmenu
