@@ -14,12 +14,13 @@
 #include "mqtt_service.h"
 #include "network_manager.h"
 #include "outbox.h"
+#include "publisher_ack.h"
 #include "time_service.h"
 
 static const char *TAG="publisher";
 static uint32_t boot_id;
 static uint32_t sequence;
-static bool awaiting_ack;
+static gateway_publisher_ack_t publish_ack;
 
 static void report_memory_health(void)
 {
@@ -57,15 +58,31 @@ static void enqueue_health(void)
 {
     char json[GATEWAY_JSON_MAX_LEN], id[GATEWAY_EVENT_ID_MAX_LEN];
     gateway_event_id_make(id,sizeof(id),boot_id,++sequence);
-    if (gateway_json_encode_health(json,sizeof(json),id,gateway_config_get(),(uint32_t)(esp_timer_get_time()/1000000LL),network_manager_status_text(),mqtt_service_status_text(),time_service_status_text(),csv_logger_is_ready(),gateway_outbox_pending_count(),device_manager_capture_drop_count(),device_manager_upload_drop_count()) >= 0)
+    if (gateway_json_encode_health(json, sizeof(json), id, gateway_config_get(),
+                                   (uint32_t)(esp_timer_get_time() / 1000000LL),
+                                   network_manager_status_text(), mqtt_service_status_text(),
+                                   time_service_status_text(), csv_logger_is_ready(),
+                                   gateway_outbox_pending_count(), gateway_outbox_pending_bytes(),
+                                   gateway_outbox_failure_count(),
+                                   device_manager_capture_drop_count(),
+                                   device_manager_upload_drop_count()) >= 0)
         gateway_outbox_store_health(json);
 }
 static void publish_next(void)
 {
-    char json[OUTBOX_MESSAGE_MAX_LEN]; bool health;
-    if (awaiting_ack || !mqtt_service_is_connected() || !gateway_outbox_next(json,&health)) return;
-    if (mqtt_service_publish(json) < 0) { gateway_outbox_release_current(); return; }
-    awaiting_ack=true;
+    char json[OUTBOX_MESSAGE_MAX_LEN];
+    bool health;
+    int message_id;
+
+    if (publish_ack.awaiting || !mqtt_service_is_connected() || !gateway_outbox_next(json, &health)) {
+        return;
+    }
+    message_id = mqtt_service_publish(json);
+    if (!gateway_publisher_ack_begin(&publish_ack, message_id)) {
+        gateway_outbox_release_current();
+        return;
+    }
+    ESP_LOGD(TAG, "published %s message_id=%d", health ? "health" : "broadcast", message_id);
 }
 static void publisher_task(void *arg)
 {
@@ -78,19 +95,33 @@ static void publisher_task(void *arg)
             else if (mqtt_service_is_connected()) mqtt_service_publish(json);
             else ESP_LOGW(TAG,"SD and MQTT unavailable; broadcast upload dropped");
         }
-        while (mqtt_service_take_puback(&message_id)) { (void)message_id; if (awaiting_ack) { gateway_outbox_ack_current(); awaiting_ack=false; ESP_LOGD(TAG,"PUBACK received"); } }
+        while (mqtt_service_take_puback(&message_id)) {
+            if (gateway_publisher_ack_accept(&publish_ack, message_id)) {
+                gateway_outbox_ack_current();
+                ESP_LOGD(TAG, "PUBACK received: message_id=%d", message_id);
+            } else {
+                ESP_LOGW(TAG, "ignoring unmatched PUBACK: message_id=%d", message_id);
+            }
+        }
         uint32_t now=(uint32_t)(esp_timer_get_time()/1000000LL);
         if ((uint32_t)(now-last_health)>=30U) {
             enqueue_health();
             report_memory_health();
             last_health=now;
         }
-        if (!mqtt_service_is_connected() && awaiting_ack) { gateway_outbox_release_current(); awaiting_ack=false; }
+        if (!mqtt_service_is_connected() && publish_ack.awaiting) {
+            gateway_outbox_release_current();
+            gateway_publisher_ack_reset(&publish_ack);
+            ESP_LOGW(TAG, "MQTT disconnected; current outbox record retained for retry");
+        }
         publish_next();
     }
 }
 void gateway_publisher_start(void)
 {
-    boot_id=esp_random(); gateway_outbox_init(); xTaskCreate(publisher_task,"publisher",6144,NULL,4,NULL);
+    boot_id=esp_random();
+    gateway_publisher_ack_reset(&publish_ack);
+    gateway_outbox_init();
+    xTaskCreate(publisher_task,"publisher",6144,NULL,4,NULL);
     ESP_LOGI(TAG,"publisher boot_id=%08lX",(unsigned long)boot_id);
 }

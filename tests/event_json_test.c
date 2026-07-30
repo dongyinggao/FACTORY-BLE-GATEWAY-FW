@@ -20,7 +20,10 @@ int main(void)
     assert(strstr(json, "\"event\":\"BROADCAST_STARTED\"") != NULL);
     assert(strstr(json, "\"event_id\":\"000012AB-7\"") != NULL);
     assert(gateway_json_encode_health(json, sizeof(json), "000012AB-8", &config, 30,
-                                      "Connected", "Connected", "Synced", true, 2, 0, 1) > 0);
+                                      "Connected", "Connected", "Synced", true, 2, 512, 3,
+                                      0, 1) > 0);
+    assert(strstr(json, "\"outbox_bytes\":512") != NULL);
+    assert(strstr(json, "\"outbox_failures\":3") != NULL);
     assert(strstr(json, "\"capture_dropped\":0") != NULL);
     assert(strstr(json, "\"upload_dropped\":1") != NULL);
     puts("event_json tests passed");

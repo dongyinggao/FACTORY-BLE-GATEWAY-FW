@@ -120,9 +120,11 @@ static void update_recent_device(const device_manager_ui_event_t *event)
 
 static void update_network_status(void)
 {
-    lv_label_set_text_fmt(network_status_label, "WiFi:%s MQTT:%s NTP:%s Outbox:%lu",
+    lv_label_set_text_fmt(network_status_label, "WiFi:%s MQTT:%s Outbox:%lu/%luK Err:%lu",
                           network_manager_status_text(), mqtt_service_status_text(),
-                          time_service_status_text(), (unsigned long)gateway_outbox_pending_count());
+                          (unsigned long)gateway_outbox_pending_count(),
+                          (unsigned long)(gateway_outbox_pending_bytes() / 1024U),
+                          (unsigned long)gateway_outbox_failure_count());
 }
 
 static void scanner_toggle_cb(lv_event_t *event)
@@ -194,7 +196,7 @@ void app_ui_start(void)
     lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 55);
 
     network_status_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(network_status_label, "WiFi:... MQTT:... NTP:... Outbox:0");
+    lv_label_set_text(network_status_label, "WiFi:... MQTT:... OB:0/0K E:0");
     lv_obj_align(network_status_label, LV_ALIGN_TOP_MID, 0, 73);
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {

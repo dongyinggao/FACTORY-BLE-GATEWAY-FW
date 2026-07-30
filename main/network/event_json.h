@@ -30,5 +30,6 @@ int gateway_json_encode_broadcast(char *output, size_t output_size,
 int gateway_json_encode_health(char *output, size_t output_size, const char *event_id,
                                const gateway_config_t *config, uint32_t uptime_s,
                                const char *wifi, const char *mqtt, const char *sntp,
-                               bool sd_ready, uint32_t outbox_messages,
+                               bool sd_ready, uint32_t outbox_messages, uint32_t outbox_bytes,
+                               uint32_t outbox_failures,
                                uint32_t capture_dropped, uint32_t upload_dropped);
