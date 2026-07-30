@@ -65,8 +65,12 @@ static void enqueue_health(void)
                                    gateway_outbox_pending_count(), gateway_outbox_pending_bytes(),
                                    gateway_outbox_failure_count(),
                                    device_manager_capture_drop_count(),
-                                   device_manager_upload_drop_count()) >= 0)
-        gateway_outbox_store_health(json);
+                                   device_manager_upload_drop_count()) >= 0) {
+        if (!gateway_outbox_store_health(json) && mqtt_service_is_connected()) {
+            ESP_LOGW(TAG, "SD unavailable; sending health without persistent outbox");
+            (void)mqtt_service_publish(json);
+        }
+    }
 }
 static void publish_next(void)
 {
@@ -89,10 +93,20 @@ static void publisher_task(void *arg)
     QueueHandle_t queue=device_manager_get_upload_queue(); device_lifecycle_event_t event; int message_id; uint32_t last_health=0;
     (void)arg;
     while (true) {
+        gateway_outbox_sync_storage();
         if (xQueueReceive(queue,&event,pdMS_TO_TICKS(200))==pdTRUE) {
             char json[GATEWAY_JSON_MAX_LEN]; make_broadcast(&event,json);
-            if (gateway_outbox_is_ready()) { if (!gateway_outbox_enqueue_broadcast(json)) ESP_LOGE(TAG,"broadcast persistence failed"); }
-            else if (mqtt_service_is_connected()) mqtt_service_publish(json);
+            if (gateway_outbox_is_ready()) {
+                if (!gateway_outbox_enqueue_broadcast(json)) {
+                    ESP_LOGE(TAG,"broadcast persistence failed");
+                    if (mqtt_service_is_connected()) {
+                        ESP_LOGW(TAG, "sending broadcast without persistent outbox");
+                        (void)mqtt_service_publish(json);
+                    }
+                }
+            } else if (mqtt_service_is_connected()) {
+                (void)mqtt_service_publish(json);
+            }
             else ESP_LOGW(TAG,"SD and MQTT unavailable; broadcast upload dropped");
         }
         while (mqtt_service_take_puback(&message_id)) {

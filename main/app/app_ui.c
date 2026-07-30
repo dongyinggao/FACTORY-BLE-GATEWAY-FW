@@ -120,11 +120,10 @@ static void update_recent_device(const device_manager_ui_event_t *event)
 
 static void update_network_status(void)
 {
-    lv_label_set_text_fmt(network_status_label, "WiFi:%s MQTT:%s Outbox:%lu/%luK Err:%lu",
+    lv_label_set_text_fmt(network_status_label, "WiFi:%s MQTT:%s OB:%lu/%luK",
                           network_manager_status_text(), mqtt_service_status_text(),
                           (unsigned long)gateway_outbox_pending_count(),
-                          (unsigned long)(gateway_outbox_pending_bytes() / 1024U),
-                          (unsigned long)gateway_outbox_failure_count());
+                          (unsigned long)(gateway_outbox_pending_bytes() / 1024U));
 }
 
 static void scanner_toggle_cb(lv_event_t *event)
@@ -165,9 +164,13 @@ static void app_ui_task(void *parameter)
             lv_label_set_text(toggle_label, scanner_button_text(event.scanner_state));
             if (event.scanner_state == BLE_SCANNER_STATE_ERROR) {
                 lv_label_set_text_fmt(device_count_label, "Scanner error: %d", event.error_code);
+            } else {
+                update_device_list();
             }
-        } else if (received == pdTRUE) {
-            update_recent_device(&event);
+        } else {
+            if (received == pdTRUE) {
+                update_recent_device(&event);
+            }
             update_device_list();
         }
         update_network_status();
@@ -196,7 +199,7 @@ void app_ui_start(void)
     lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 55);
 
     network_status_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(network_status_label, "WiFi:... MQTT:... OB:0/0K E:0");
+    lv_label_set_text(network_status_label, "WiFi:... MQTT:... OB:0/0K");
     lv_obj_align(network_status_label, LV_ALIGN_TOP_MID, 0, 73);
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {

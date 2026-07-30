@@ -8,6 +8,7 @@
 #include "gateway_publisher.h"
 #include "mqtt_service.h"
 #include "network_manager.h"
+#include "storage_manager.h"
 #include "time_service.h"
 
 void app_main(void)
@@ -24,6 +25,7 @@ void app_main(void)
     time_service_init();
     ble_scanner_init();
     device_manager_init();
+    storage_manager_start();
     csv_logger_start();
     app_ui_start();
     network_manager_start();
