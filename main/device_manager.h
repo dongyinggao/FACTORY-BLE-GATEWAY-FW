@@ -5,23 +5,31 @@
 
 #include "ble_scanner.h"
 #include "device_manager_core.h"
+#include "device_lifecycle.h"
 
 typedef enum {
     DEVICE_MANAGER_EVENT_SCANNER_STATE,
-    DEVICE_MANAGER_EVENT_DEVICE_ADDED,
-    DEVICE_MANAGER_EVENT_DEVICE_UPDATED,
-    DEVICE_MANAGER_EVENT_BROADCAST_STARTED,
-    DEVICE_MANAGER_EVENT_BROADCAST_ENDED,
+    DEVICE_MANAGER_EVENT_DEVICE_CHANGED,
 } device_manager_event_type_t;
 
 typedef struct {
     device_manager_event_type_t type;
     ble_scanner_state_t scanner_state;
     int error_code;
-    managed_device_t device;
-} device_manager_event_t;
+    uint16_t device_count;
+    uint16_t broadcasting_count;
+    char name[BLE_DEVICE_NAME_MAX_LEN];
+    uint8_t address[6];
+    int8_t rssi;
+    bool broadcasting;
+} device_manager_ui_event_t;
+
+#define DEVICE_MANAGER_UI_QUEUE_LEN 32
+#define DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN 256
 
 void device_manager_init(void);
-QueueHandle_t device_manager_get_event_queue(void);
+QueueHandle_t device_manager_get_ui_event_queue(void);
 QueueHandle_t device_manager_get_capture_queue(void);
 QueueHandle_t device_manager_get_upload_queue(void);
+uint32_t device_manager_capture_drop_count(void);
+uint32_t device_manager_upload_drop_count(void);

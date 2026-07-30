@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "device_manager_core.h"
+#include "device_lifecycle.h"
 #include "gateway_config.h"
 
 #define GATEWAY_EVENT_ID_MAX_LEN 48
@@ -14,7 +14,7 @@ typedef enum { GATEWAY_BROADCAST_STARTED, GATEWAY_BROADCAST_ENDED } gateway_broa
 typedef struct {
     char event_id[GATEWAY_EVENT_ID_MAX_LEN];
     gateway_broadcast_type_t type;
-    managed_device_t device;
+    device_lifecycle_event_t device;
     uint32_t event_uptime_s;
     bool time_synced;
     char timestamp[32];
@@ -30,4 +30,5 @@ int gateway_json_encode_broadcast(char *output, size_t output_size,
 int gateway_json_encode_health(char *output, size_t output_size, const char *event_id,
                                const gateway_config_t *config, uint32_t uptime_s,
                                const char *wifi, const char *mqtt, const char *sntp,
-                               bool sd_ready, uint32_t outbox_messages);
+                               bool sd_ready, uint32_t outbox_messages,
+                               uint32_t capture_dropped, uint32_t upload_dropped);

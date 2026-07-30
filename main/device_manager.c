@@ -1,58 +1,99 @@
 #include "device_manager.h"
 
+#include <string.h>
+
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/task.h"
 
 #include "gateway_config.h"
 
 static const char *TAG = "device_manager";
-static QueueHandle_t manager_event_queue;
+static QueueHandle_t ui_event_queue;
 static QueueHandle_t capture_event_queue;
 static QueueHandle_t upload_event_queue;
 static device_registry_t registry;
 static device_observation_clock_t observation_clock;
+static uint32_t capture_drop_count;
+static uint32_t upload_drop_count;
 
 static uint32_t manager_now_ms(void)
 {
     return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 }
 
-static void manager_publish(device_manager_event_type_t type, const managed_device_t *device)
+static uint16_t manager_device_count(bool broadcasting_only)
 {
-    device_manager_event_t event = {
-        .type = type,
+    uint16_t count = 0;
+    for (size_t index = 0; index < DEVICE_MANAGER_MAX_DEVICES; ++index) {
+        if (registry.devices[index].report.name[0] != '\0' &&
+            (!broadcasting_only || registry.devices[index].broadcasting)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+static void manager_publish_ui(const managed_device_t *device)
+{
+    device_manager_ui_event_t event = {
+        .type = DEVICE_MANAGER_EVENT_DEVICE_CHANGED,
+        .device_count = manager_device_count(false),
+        .broadcasting_count = manager_device_count(true),
     };
 
     if (device != NULL) {
-        event.device = *device;
+        memcpy(event.name, device->report.name, sizeof(event.name));
+        memcpy(event.address, device->report.address, sizeof(event.address));
+        event.rssi = device->report.rssi;
+        event.broadcasting = device->broadcasting;
     }
-
-    if (xQueueSend(manager_event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "manager event queue full; event dropped");
-    }
-    if ((type == DEVICE_MANAGER_EVENT_BROADCAST_STARTED ||
-         type == DEVICE_MANAGER_EVENT_BROADCAST_ENDED) &&
-        xQueueSend(capture_event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "capture event queue full; event dropped");
-    }
-    if ((type == DEVICE_MANAGER_EVENT_BROADCAST_STARTED ||
-         type == DEVICE_MANAGER_EVENT_BROADCAST_ENDED) &&
-        xQueueSend(upload_event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "upload event queue full; event dropped");
+    if (xQueueSend(ui_event_queue, &event, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "UI event queue full; UI refresh skipped");
     }
 }
 
 static void manager_publish_scanner_state(const ble_scanner_event_t *scanner_event)
 {
-    device_manager_event_t event = {
+    device_manager_ui_event_t event = {
         .type = DEVICE_MANAGER_EVENT_SCANNER_STATE,
         .scanner_state = scanner_event->state,
         .error_code = scanner_event->error_code,
+        .device_count = manager_device_count(false),
+        .broadcasting_count = manager_device_count(true),
     };
 
-    if (xQueueSend(manager_event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "manager event queue full; scanner state dropped");
+    if (xQueueSend(ui_event_queue, &event, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "UI event queue full; scanner state skipped");
+    }
+}
+
+static void manager_publish_lifecycle(device_lifecycle_event_type_t type,
+                                      const managed_device_t *device)
+{
+    device_lifecycle_event_t event = {
+        .type = type,
+        .address_type = device->report.address_type,
+        .rssi = device->report.rssi,
+        .broadcast_started_ms = device->broadcast_started_ms,
+        .last_seen_ms = device->last_seen_ms,
+        .end_detected_ms = device->end_detected_ms,
+        .broadcast_started_wall_ms = device->broadcast_started_wall_ms,
+        .last_seen_wall_ms = device->last_seen_wall_ms,
+        .end_detected_wall_ms = device->end_detected_wall_ms,
+    };
+    memcpy(event.name, device->report.name, sizeof(event.name));
+    memcpy(event.address, device->report.address, sizeof(event.address));
+
+    if (xQueueSend(capture_event_queue, &event, 0) != pdTRUE) {
+        ++capture_drop_count;
+        ESP_LOGE(TAG, "capture queue full; lifecycle event lost");
+    }
+    if (xQueueSend(upload_event_queue, &event, 0) != pdTRUE) {
+        ++upload_drop_count;
+        ESP_LOGE(TAG, "upload queue full; lifecycle event lost");
     }
 }
 
@@ -76,14 +117,12 @@ static void manager_process_report(const ble_scan_report_t *report, uint32_t wal
     switch (result) {
     case DEVICE_REGISTRY_ADDED:
         ESP_LOGI(TAG, "device added: %s", report->name);
-        manager_publish(DEVICE_MANAGER_EVENT_DEVICE_ADDED, &registry.devices[index]);
-        manager_publish(DEVICE_MANAGER_EVENT_BROADCAST_STARTED, &registry.devices[index]);
-        break;
-    case DEVICE_REGISTRY_UPDATED:
-        manager_publish(DEVICE_MANAGER_EVENT_DEVICE_UPDATED, &registry.devices[index]);
+        manager_publish_ui(&registry.devices[index]);
+        manager_publish_lifecycle(DEVICE_LIFECYCLE_BROADCAST_STARTED, &registry.devices[index]);
         break;
     case DEVICE_REGISTRY_BROADCAST_STARTED:
-        manager_publish(DEVICE_MANAGER_EVENT_BROADCAST_STARTED, &registry.devices[index]);
+        manager_publish_ui(&registry.devices[index]);
+        manager_publish_lifecycle(DEVICE_LIFECYCLE_BROADCAST_STARTED, &registry.devices[index]);
         break;
     case DEVICE_REGISTRY_FULL:
         ESP_LOGW(TAG, "device table full; report dropped");
@@ -103,7 +142,8 @@ static void manager_mark_ended_broadcasts(void)
                                                        gateway_config_get()->broadcast_end_ms,
                                                        &index) == DEVICE_REGISTRY_BROADCAST_ENDED) {
         ESP_LOGI(TAG, "broadcast ended: %s", registry.devices[index].report.name);
-        manager_publish(DEVICE_MANAGER_EVENT_BROADCAST_ENDED, &registry.devices[index]);
+        manager_publish_ui(&registry.devices[index]);
+        manager_publish_lifecycle(DEVICE_LIFECYCLE_BROADCAST_ENDED, &registry.devices[index]);
     }
 }
 
@@ -134,19 +174,23 @@ static void device_manager_task(void *parameter)
 
 void device_manager_init(void)
 {
-    manager_event_queue = xQueueCreate(BLE_EVENT_QUEUE_MAX_LEN, sizeof(device_manager_event_t));
-    configASSERT(manager_event_queue != NULL);
-    capture_event_queue = xQueueCreate(BLE_EVENT_QUEUE_MAX_LEN, sizeof(device_manager_event_t));
+    ui_event_queue = xQueueCreate(DEVICE_MANAGER_UI_QUEUE_LEN, sizeof(device_manager_ui_event_t));
+    configASSERT(ui_event_queue != NULL);
+    capture_event_queue = xQueueCreateWithCaps(DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN,
+                                                sizeof(device_lifecycle_event_t),
+                                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     configASSERT(capture_event_queue != NULL);
-    upload_event_queue = xQueueCreate(BLE_EVENT_QUEUE_MAX_LEN, sizeof(device_manager_event_t));
+    upload_event_queue = xQueueCreateWithCaps(DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN,
+                                               sizeof(device_lifecycle_event_t),
+                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     configASSERT(upload_event_queue != NULL);
     device_observation_clock_init(&observation_clock, manager_now_ms());
     xTaskCreate(device_manager_task, "device_manager", 4096, NULL, 5, NULL);
 }
 
-QueueHandle_t device_manager_get_event_queue(void)
+QueueHandle_t device_manager_get_ui_event_queue(void)
 {
-    return manager_event_queue;
+    return ui_event_queue;
 }
 
 QueueHandle_t device_manager_get_capture_queue(void)
@@ -157,4 +201,14 @@ QueueHandle_t device_manager_get_capture_queue(void)
 QueueHandle_t device_manager_get_upload_queue(void)
 {
     return upload_event_queue;
+}
+
+uint32_t device_manager_capture_drop_count(void)
+{
+    return capture_drop_count;
+}
+
+uint32_t device_manager_upload_drop_count(void)
+{
+    return upload_drop_count;
 }
