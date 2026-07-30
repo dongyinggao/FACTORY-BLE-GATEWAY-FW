@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 
 #include "storage_state_core.h"
+#include "device_manager.h"
 
 #define STORAGE_RETRY_DELAY_S 5U
 
@@ -58,6 +59,7 @@ static void try_mount_locked(void)
         ESP_LOGW(TAG, "SD mount failed: %s; retry in %u s", esp_err_to_name(result),
                  STORAGE_RETRY_DELAY_S);
     }
+    device_manager_request_ui_status_refresh();
 }
 
 static void storage_manager_task(void *parameter)
@@ -72,6 +74,7 @@ static void storage_manager_task(void *parameter)
             esp_err_t result = unmount_sd_preserving_shared_spi();
             storage_state.mounted = false;
             ESP_LOGW(TAG, "SD unmounted after I/O failure: %s", esp_err_to_name(result));
+            device_manager_request_ui_status_refresh();
         }
         if (storage_state_core_retry_due(&storage_state, uptime_s())) {
             try_mount_locked();
@@ -116,6 +119,7 @@ void storage_manager_unlock(void)
 void storage_manager_report_io_failure(void)
 {
     storage_state_core_mark_failed(&storage_state, uptime_s(), STORAGE_RETRY_DELAY_S);
+    device_manager_request_ui_status_refresh();
 }
 
 bool storage_manager_is_ready(void)

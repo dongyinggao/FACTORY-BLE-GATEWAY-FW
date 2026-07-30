@@ -8,6 +8,7 @@
 
 #include "gateway_config.h"
 #include "network_manager.h"
+#include "device_manager.h"
 
 static const char *TAG="mqtt_service";
 static esp_mqtt_client_handle_t client;
@@ -18,15 +19,15 @@ static char mqtt_client_id[48];
 static void mqtt_event(void *args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     esp_mqtt_event_handle_t event=event_data; (void)args;(void)base;
-    if (event_id==MQTT_EVENT_CONNECTED) { connected=true; ESP_LOGI(TAG,"MQTT connected"); }
-    else if (event_id==MQTT_EVENT_DISCONNECTED) { connected=false; ESP_LOGW(TAG,"MQTT disconnected"); }
+    if (event_id==MQTT_EVENT_CONNECTED) { connected=true; ESP_LOGI(TAG,"MQTT connected"); device_manager_request_ui_status_refresh(); }
+    else if (event_id==MQTT_EVENT_DISCONNECTED) { connected=false; ESP_LOGW(TAG,"MQTT disconnected"); device_manager_request_ui_status_refresh(); }
     else if (event_id==MQTT_EVENT_PUBLISHED && puback_queue) xQueueSend(puback_queue,&event->msg_id,0);
 }
 static void mqtt_reload(void)
 {
     const gateway_config_t *c=gateway_config_get(); esp_mqtt_client_config_t cfg={0};
     if (client) { esp_mqtt_client_stop(client); esp_mqtt_client_destroy(client); client=NULL; connected=false; }
-    if (!gateway_config_mqtt_is_valid(c)) { ESP_LOGW(TAG,"MQTT not configured"); return; }
+    if (!gateway_config_mqtt_is_valid(c)) { ESP_LOGW(TAG,"MQTT not configured"); device_manager_request_ui_status_refresh(); return; }
     snprintf(mqtt_client_id,sizeof(mqtt_client_id),"gateway-%s",c->gateway_id[0]?c->gateway_id:"unassigned");
     cfg.broker.address.uri=c->mqtt_uri; cfg.credentials.username=c->mqtt_username[0]?c->mqtt_username:NULL; cfg.credentials.authentication.password=c->mqtt_password[0]?c->mqtt_password:NULL; cfg.credentials.client_id=mqtt_client_id;
     client=esp_mqtt_client_init(&cfg); if (!client) return;

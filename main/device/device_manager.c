@@ -193,6 +193,17 @@ QueueHandle_t device_manager_get_ui_event_queue(void)
     return ui_event_queue;
 }
 
+void device_manager_request_ui_status_refresh(void)
+{
+    const device_manager_ui_event_t event = {
+        .type = DEVICE_MANAGER_EVENT_STATUS_CHANGED,
+    };
+
+    if (ui_event_queue != NULL) {
+        (void)xQueueSend(ui_event_queue, &event, 0);
+    }
+}
+
 QueueHandle_t device_manager_get_capture_queue(void)
 {
     return capture_event_queue;
