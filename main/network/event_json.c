@@ -39,10 +39,14 @@ int gateway_json_encode_broadcast(char *out, size_t size, const gateway_broadcas
         !key_string(out,size,&used,"last_seen_at",m->last_seen_at,true) || !key_string(out,size,&used,"end_detected_at",m->end_detected_at,false) || !append(out,size,&used,"}")) return -1;
     return (int)used;
 }
-int gateway_json_encode_health(char *out, size_t size, const char *event_id, const gateway_config_t *c, uint32_t uptime_s, const char *wifi, const char *mqtt, const char *sntp, bool sd, uint32_t outbox, uint32_t capture_dropped, uint32_t upload_dropped)
+int gateway_json_encode_health(char *out, size_t size, const char *event_id, const gateway_config_t *c,
+                               uint32_t uptime_s, const char *wifi, const char *mqtt,
+                               const char *sntp, bool sd, uint32_t outbox, uint32_t outbox_bytes,
+                               uint32_t outbox_failures, uint32_t capture_dropped,
+                               uint32_t upload_dropped)
 {
     size_t used=0;
     if (!out || !event_id || !c) return -1;
-    if (!append(out,size,&used,"{") || !key_string(out,size,&used,"message_type","gateway_health",true) || !key_string(out,size,&used,"event_id",event_id,true) || !key_string(out,size,&used,"gateway_id",c->gateway_id,true) || !append(out,size,&used,"\"uptime_s\":%lu,",(unsigned long)uptime_s) || !key_string(out,size,&used,"wifi",wifi,true) || !key_string(out,size,&used,"mqtt",mqtt,true) || !key_string(out,size,&used,"sntp",sntp,true) || !append(out,size,&used,"\"sd_ready\":%s,\"outbox_messages\":%lu,\"capture_dropped\":%lu,\"upload_dropped\":%lu}",sd?"true":"false",(unsigned long)outbox,(unsigned long)capture_dropped,(unsigned long)upload_dropped)) return -1;
+    if (!append(out,size,&used,"{") || !key_string(out,size,&used,"message_type","gateway_health",true) || !key_string(out,size,&used,"event_id",event_id,true) || !key_string(out,size,&used,"gateway_id",c->gateway_id,true) || !append(out,size,&used,"\"uptime_s\":%lu,",(unsigned long)uptime_s) || !key_string(out,size,&used,"wifi",wifi,true) || !key_string(out,size,&used,"mqtt",mqtt,true) || !key_string(out,size,&used,"sntp",sntp,true) || !append(out,size,&used,"\"sd_ready\":%s,\"outbox_messages\":%lu,\"outbox_bytes\":%lu,\"outbox_failures\":%lu,\"capture_dropped\":%lu,\"upload_dropped\":%lu}",sd?"true":"false",(unsigned long)outbox,(unsigned long)outbox_bytes,(unsigned long)outbox_failures,(unsigned long)capture_dropped,(unsigned long)upload_dropped)) return -1;
     return (int)used;
 }
