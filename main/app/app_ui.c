@@ -83,7 +83,7 @@ static void update_device_list(void)
         }
         lv_label_set_text_fmt(device_rows[row],
                               "%s %s  %d dBm\n%02X:%02X:%02X:%02X:%02X:%02X",
-                              device->broadcasting ? "ON" : "END", device->name, device->rssi,
+                              device->broadcasting ? "START" : "END", device->name, device->rssi,
                               device->address[5], device->address[4], device->address[3],
                               device->address[2], device->address[1], device->address[0]);
     }

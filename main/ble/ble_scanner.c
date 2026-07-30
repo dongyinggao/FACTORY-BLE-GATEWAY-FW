@@ -12,6 +12,7 @@
 #include "nimble/nimble_port_freertos.h"
 
 static const char *TAG = "ble_scanner";
+
 static QueueHandle_t scanner_event_queue;
 static bool scanner_enabled;
 static bool scanner_ready;
@@ -19,6 +20,7 @@ static bool scan_in_progress;
 static bool scan_cancel_pending;
 static ble_scanner_state_t scanner_state;
 static uint8_t own_address_type;
+static uint32_t scanner_report_drop_count;
 
 static void scanner_publish_state(ble_scanner_state_t state, int error_code)
 {
@@ -39,7 +41,7 @@ static void scanner_set_state(ble_scanner_state_t state, int error_code)
     scanner_publish_state(state, error_code);
 }
 
-static void scanner_start_session(void);
+static void scanner_start_continuous(void);
 
 static int scanner_gap_event(struct ble_gap_event *event, void *arg)
 {
@@ -69,24 +71,23 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
             .state = BLE_SCANNER_STATE_SCANNING,
             .report = report,
         };
-        ESP_LOGI(TAG,
-                 "matched %s addr=%02X:%02X:%02X:%02X:%02X:%02X type=%u RSSI=%d adv_len=%u",
-                 report.name,
-                 report.address[5], report.address[4], report.address[3],
-                 report.address[2], report.address[1], report.address[0],
-                 report.address_type, report.rssi, event->disc.length_data);
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, event->disc.data, event->disc.length_data, ESP_LOG_INFO);
         if (xQueueSend(scanner_event_queue, &scanner_event, 0) != pdTRUE) {
-            ESP_LOGW(TAG, "scanner event queue full; report dropped");
+            ++scanner_report_drop_count;
+            if (scanner_report_drop_count == 1 ||
+                (scanner_report_drop_count % 10U) == 0U) {
+                ESP_LOGW(TAG, "scanner event queue full; reports dropped=%lu",
+                         (unsigned long)scanner_report_drop_count);
+            }
         }
         return 0;
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
         scan_in_progress = false;
         scan_cancel_pending = false;
-        ESP_LOGI(TAG, "scan session completed: reason=%d", event->disc_complete.reason);
+        ESP_LOGW(TAG, "continuous scan completed unexpectedly: reason=%d",
+                 event->disc_complete.reason);
         if (scanner_enabled) {
-            scanner_start_session();
+            scanner_start_continuous();
         } else {
             scanner_set_state(BLE_SCANNER_STATE_IDLE, 0);
         }
@@ -97,7 +98,7 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
     }
 }
 
-static void scanner_start_session(void)
+static void scanner_start_continuous(void)
 {
     struct ble_gap_disc_params parameters = {0};
     int rc;
@@ -111,7 +112,8 @@ static void scanner_start_session(void)
     parameters.itvl = 0;
     parameters.window = 0;
 
-    rc = ble_gap_disc(own_address_type, 500, &parameters, scanner_gap_event, NULL);
+    rc = ble_gap_disc(own_address_type, BLE_HS_FOREVER,
+                      &parameters, scanner_gap_event, NULL);
     if (rc != 0) {
         ESP_LOGE(TAG, "unable to start scan: rc=%d", rc);
         scanner_set_state(BLE_SCANNER_STATE_ERROR, rc);
@@ -120,7 +122,7 @@ static void scanner_start_session(void)
 
     scan_in_progress = true;
     scanner_set_state(BLE_SCANNER_STATE_SCANNING, 0);
-    ESP_LOGI(TAG, "active scan started for 5 seconds");
+    ESP_LOGI(TAG, "continuous active scan started");
 }
 
 static void scanner_on_sync(void)
@@ -136,7 +138,7 @@ static void scanner_on_sync(void)
     scan_cancel_pending = false;
     ESP_LOGI(TAG, "NimBLE host synchronized");
     scanner_set_state(BLE_SCANNER_STATE_IDLE, 0);
-    scanner_start_session();
+    scanner_start_continuous();
 }
 
 static void scanner_on_reset(int reason)
@@ -183,7 +185,7 @@ void ble_scanner_start(void)
         ESP_LOGI(TAG, "scan stop in progress; restart will begin after cancel completes");
         return;
     }
-    scanner_start_session();
+    scanner_start_continuous();
 }
 
 void ble_scanner_stop(void)
