@@ -45,12 +45,15 @@ static void make_broadcast(const device_lifecycle_event_t *event, char json[GATE
     message.type=event->type==DEVICE_LIFECYCLE_BROADCAST_STARTED ? GATEWAY_BROADCAST_STARTED : GATEWAY_BROADCAST_ENDED;
     message.device=*event;
     message.event_uptime_s=(message.type==GATEWAY_BROADCAST_STARTED ? event->broadcast_started_ms : event->end_detected_ms)/1000U;
+    if (message.type == GATEWAY_BROADCAST_ENDED) {
+        message.broadcast_duration_s = (event->last_seen_ms - event->broadcast_started_ms) / 1000U;
+    }
     gateway_event_id_make(message.event_id,sizeof(message.event_id),boot_id,++sequence);
-    synced=time_service_format_wall_ms(message.type==GATEWAY_BROADCAST_STARTED ? event->broadcast_started_wall_ms : event->end_detected_wall_ms,message.timestamp,sizeof(message.timestamp));
+    synced=time_service_format_wall_ms(message.type==GATEWAY_BROADCAST_STARTED ? event->broadcast_started_wall_ms : event->end_detected_wall_ms,message.recorded_at,sizeof(message.recorded_at));
     message.time_synced=synced;
     if (synced) {
         time_service_format_wall_ms(event->broadcast_started_wall_ms,message.broadcast_started_at,sizeof(message.broadcast_started_at));
-        time_service_format_wall_ms(event->last_seen_wall_ms,message.last_seen_at,sizeof(message.last_seen_at));
+        time_service_format_wall_ms(event->last_seen_wall_ms,message.broadcast_ended_at,sizeof(message.broadcast_ended_at));
         if (message.type==GATEWAY_BROADCAST_ENDED) time_service_format_wall_ms(event->end_detected_wall_ms,message.end_detected_at,sizeof(message.end_detected_at));
     }
     gateway_json_encode_broadcast(json,GATEWAY_JSON_MAX_LEN,&message,gateway_config_get());

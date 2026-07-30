@@ -30,13 +30,22 @@ int gateway_json_encode_broadcast(char *out, size_t size, const gateway_broadcas
     event = m->type == GATEWAY_BROADCAST_STARTED ? "BROADCAST_STARTED" : "BROADCAST_ENDED";
     snprintf(mac,sizeof(mac),"%02X:%02X:%02X:%02X:%02X:%02X",m->device.address[5],m->device.address[4],m->device.address[3],m->device.address[2],m->device.address[1],m->device.address[0]);
     if (!append(out,size,&used,"{") || !key_string(out,size,&used,"message_type","broadcast",true) ||
-        !key_string(out,size,&used,"event_id",m->event_id,true) || !key_string(out,size,&used,"gateway_id",c->gateway_id,true) ||
-        !key_string(out,size,&used,"gateway_location",c->gateway_location,true) || !key_string(out,size,&used,"event",event,true) ||
-        !key_string(out,size,&used,"device_id",mac,true) || !key_string(out,size,&used,"device_name",m->device.name,true) ||
-        !key_string(out,size,&used,"mac",mac,true) || !append(out,size,&used,"\"address_type\":%u,",m->device.address_type) ||
-        !append(out,size,&used,"\"rssi\":%d,\"time_synced\":%s,\"event_uptime_s\":%lu,",m->device.rssi,m->time_synced?"true":"false",(unsigned long)m->event_uptime_s) ||
-        !key_string(out,size,&used,"timestamp",m->timestamp,true) || !key_string(out,size,&used,"broadcast_started_at",m->broadcast_started_at,true) ||
-        !key_string(out,size,&used,"last_seen_at",m->last_seen_at,true) || !key_string(out,size,&used,"end_detected_at",m->end_detected_at,false) || !append(out,size,&used,"}")) return -1;
+        !key_string(out,size,&used,"event_id",m->event_id,true) ||
+        !key_string(out,size,&used,"broadcast_id",m->device.broadcast_id,true) ||
+        !key_string(out,size,&used,"gateway_id",c->gateway_id,true) ||
+        !key_string(out,size,&used,"gateway_location",c->gateway_location,true) ||
+        !key_string(out,size,&used,"event",event,true) ||
+        !key_string(out,size,&used,"device_mac",mac,true) ||
+        !key_string(out,size,&used,"device_name",m->device.name,true) ||
+        !append(out,size,&used,"\"observed_rssi\":%d,\"time_synced\":%s,\"event_uptime_s\":%lu,",
+                m->device.rssi, m->time_synced?"true":"false", (unsigned long)m->event_uptime_s) ||
+        !key_string(out,size,&used,"recorded_at",m->recorded_at,true) ||
+        !key_string(out,size,&used,"broadcast_started_at",m->broadcast_started_at,true) ||
+        !key_string(out,size,&used,"broadcast_ended_at",m->broadcast_ended_at,true) ||
+        (m->type == GATEWAY_BROADCAST_ENDED &&
+         !append(out,size,&used,"\"broadcast_duration_s\":%lu,",(unsigned long)m->broadcast_duration_s)) ||
+        (m->type == GATEWAY_BROADCAST_STARTED && !append(out,size,&used,"\"broadcast_duration_s\":null,")) ||
+        !key_string(out,size,&used,"end_detected_at",m->end_detected_at,false) || !append(out,size,&used,"}")) return -1;
     return (int)used;
 }
 int gateway_json_encode_health(char *out, size_t size, const gateway_health_message_t *m)

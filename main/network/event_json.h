@@ -16,10 +16,11 @@ typedef struct {
     gateway_broadcast_type_t type;
     device_lifecycle_event_t device;
     uint32_t event_uptime_s;
+    uint32_t broadcast_duration_s;
     bool time_synced;
-    char timestamp[32];
+    char recorded_at[32];
     char broadcast_started_at[32];
-    char last_seen_at[32];
+    char broadcast_ended_at[32];
     char end_detected_at[32];
 } gateway_broadcast_message_t;
 

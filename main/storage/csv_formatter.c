@@ -53,7 +53,7 @@ int csv_format_lifecycle_event(char *output, size_t output_size,
 {
     const char *event_name;
     uint32_t uptime_s;
-    uint32_t end_detected_uptime_s;
+    uint32_t broadcast_duration_s = 0;
     char event_time[32] = "";
     char started_time[32] = "";
     char last_seen_time[32] = "";
@@ -70,8 +70,9 @@ int csv_format_lifecycle_event(char *output, size_t output_size,
                      "BROADCAST_STARTED" : "BROADCAST_ENDED";
     uptime_s = (event->type == DEVICE_LIFECYCLE_BROADCAST_STARTED ?
                     event->broadcast_started_ms : event->end_detected_ms) / 1000U;
-    end_detected_uptime_s = event->type == DEVICE_LIFECYCLE_BROADCAST_ENDED ?
-                                 event->end_detected_ms / 1000U : 0;
+    if (event->type == DEVICE_LIFECYCLE_BROADCAST_ENDED) {
+        broadcast_duration_s = (event->last_seen_ms - event->broadcast_started_ms) / 1000U;
+    }
     synced = time_service_format_wall_ms(event->type == DEVICE_LIFECYCLE_BROADCAST_STARTED ?
                                               event->broadcast_started_wall_ms : event->end_detected_wall_ms,
                                           event_time, sizeof(event_time));
@@ -82,14 +83,8 @@ int csv_format_lifecycle_event(char *output, size_t output_size,
             time_service_format_wall_ms(event->end_detected_wall_ms, end_time, sizeof(end_time));
     }
     if (!append_quoted(output, output_size, &used, event_time) ||
-        !append_format(output, output_size, &used, ",%s,%lu,%lu,%lu,", synced ? "true" : "false",
-                       (unsigned long)uptime_s,
-                       (unsigned long)(event->broadcast_started_ms / 1000U),
-                       (unsigned long)(event->last_seen_ms / 1000U)) ||
-        (end_detected_uptime_s != 0 &&
-         !append_format(output, output_size, &used, "%lu,",
-                        (unsigned long)end_detected_uptime_s)) ||
-        (end_detected_uptime_s == 0 && !append_text(output, output_size, &used, ",")) ||
+        !append_format(output, output_size, &used, ",%s,%lu,", synced ? "true" : "false",
+                       (unsigned long)uptime_s) ||
         !append_quoted(output, output_size, &used, config->gateway_id) ||
         !append_text(output, output_size, &used, ",") ||
         !append_quoted(output, output_size, &used, config->gateway_location) ||
@@ -97,14 +92,16 @@ int csv_format_lifecycle_event(char *output, size_t output_size,
                        event->address[5], event->address[4], event->address[3], event->address[2],
                        event->address[1], event->address[0]) ||
         !append_quoted(output, output_size, &used, event->name) ||
-        !append_format(output, output_size, &used,
-                       ",\"%02X:%02X:%02X:%02X:%02X:%02X\",%u,%s,",
-                       event->address[5], event->address[4], event->address[3], event->address[2],
-                       event->address[1], event->address[0], event->address_type, event_name) ||
+        !append_format(output, output_size, &used, ",%s,", event_name) ||
+        !append_quoted(output, output_size, &used, event->broadcast_id) ||
+        !append_text(output, output_size, &used, ",") ||
         !append_quoted(output, output_size, &used, started_time) || !append_text(output, output_size, &used, ",") ||
         !append_quoted(output, output_size, &used, last_seen_time) || !append_text(output, output_size, &used, ",") ||
+        (event->type == DEVICE_LIFECYCLE_BROADCAST_ENDED &&
+         !append_format(output, output_size, &used, "%lu,", (unsigned long)broadcast_duration_s)) ||
+        (event->type == DEVICE_LIFECYCLE_BROADCAST_STARTED && !append_text(output, output_size, &used, ",")) ||
         !append_quoted(output, output_size, &used, end_time) ||
-        !append_format(output, output_size, &used, ",%d,SCANNING\n", event->rssi)) {
+        !append_format(output, output_size, &used, ",%d\n", event->rssi)) {
         return -1;
     }
     return (int)used;

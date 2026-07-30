@@ -16,7 +16,7 @@ static csv_lifecycle_event_t event_for(device_lifecycle_event_type_t type)
     event.address[3] = 0xCC;
     event.address[4] = 0xBB;
     event.address[5] = 0xAA;
-    event.address_type = 1;
+    strcpy(event.broadcast_id, "BCAST-1");
     event.rssi = -55;
     event.broadcast_started_ms = 22000;
     event.last_seen_ms = 45000;
@@ -34,27 +34,27 @@ static void test_started_record_and_escaping(void)
     char line[CSV_LIFECYCLE_LINE_MAX_LEN];
 
     assert(csv_format_lifecycle_event(line, sizeof(line), &event, &config) > 0);
-    assert(strstr(line, ",false,22,22,45,,\"GW-01\",\"Room,\"\"North\"\"\",") != NULL);
+    assert(strstr(line, ",false,22,\"GW-01\",\"Room,\"\"North\"\"\",") != NULL);
     assert(strstr(line, "\"AA:BB:CC:DD:EE:FF\",\"SM_ICM2\"") != NULL);
-    assert(strstr(line, ",BROADCAST_STARTED,\"\",\"\",\"\",-55,SCANNING\n") != NULL);
+    assert(strstr(line, ",BROADCAST_STARTED,\"BCAST-1\",\"\",\"\",,\"\",-55\n") != NULL);
 }
 
-static void test_ended_record_uses_end_detection_uptime(void)
+static void test_ended_record_includes_broadcast_duration(void)
 {
     gateway_config_t config = {0};
     csv_lifecycle_event_t event = event_for(DEVICE_LIFECYCLE_BROADCAST_ENDED);
     char line[CSV_LIFECYCLE_LINE_MAX_LEN];
 
     assert(csv_format_lifecycle_event(line, sizeof(line), &event, &config) > 0);
-    assert(strstr(line, ",false,105,22,45,105,") != NULL);
-    assert(strstr(line, ",BROADCAST_ENDED,\"\",\"\",\"\",-55,SCANNING\n") != NULL);
+    assert(strstr(line, ",false,105,") != NULL);
+    assert(strstr(line, ",BROADCAST_ENDED,\"BCAST-1\",\"\",\"\",23,\"\",-55\n") != NULL);
     assert(csv_format_lifecycle_event(line, 8, &event, &config) < 0);
 }
 
 int main(void)
 {
     test_started_record_and_escaping();
-    test_ended_record_uses_end_detection_uptime();
+    test_ended_record_includes_broadcast_duration();
     puts("csv_formatter tests passed");
     return 0;
 }

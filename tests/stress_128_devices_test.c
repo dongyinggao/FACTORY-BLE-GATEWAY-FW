@@ -59,9 +59,10 @@ static void lifecycle_from_device(device_lifecycle_event_t *event, const managed
 {
     memset(event, 0, sizeof(*event));
     event->type = type;
+    snprintf(event->broadcast_id, sizeof(event->broadcast_id), "STRESS-%u",
+             (unsigned int)device->report.address[0]);
     memcpy(event->name, device->report.name, sizeof(event->name));
     memcpy(event->address, device->report.address, sizeof(event->address));
-    event->address_type = device->report.address_type;
     event->rssi = device->report.rssi;
     event->broadcast_started_ms = device->broadcast_started_ms;
     event->last_seen_ms = device->last_seen_ms;

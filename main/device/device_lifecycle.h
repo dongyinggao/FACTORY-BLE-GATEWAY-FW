@@ -13,9 +13,9 @@ typedef enum {
  * advertising payloads and UI-only state so high-volume queues fit in PSRAM. */
 typedef struct {
     device_lifecycle_event_type_t type;
+    char broadcast_id[24];
     char name[BLE_DEVICE_NAME_MAX_LEN];
     uint8_t address[6];
-    uint8_t address_type;
     int8_t rssi;
     uint32_t broadcast_started_ms;
     uint32_t last_seen_ms;
