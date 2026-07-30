@@ -248,3 +248,13 @@ QueueHandle_t ble_scanner_get_event_queue(void)
 {
     return scanner_event_queue;
 }
+
+uint32_t ble_scanner_event_queue_depth(void)
+{
+    return scanner_event_queue == NULL ? 0U : uxQueueMessagesWaiting(scanner_event_queue);
+}
+
+uint32_t ble_scanner_report_drop_count(void)
+{
+    return scanner_report_drop_count;
+}

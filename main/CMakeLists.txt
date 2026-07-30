@@ -12,6 +12,7 @@ idf_component_register(SRCS
                        "storage/outbox.c"
                        "storage/outbox_core.c"
                        "config/gateway_config.c"
+                       "config/system_console.c"
                        "network/event_json.c"
                        "network/gateway_publisher.c"
                        "network/publisher_ack.c"

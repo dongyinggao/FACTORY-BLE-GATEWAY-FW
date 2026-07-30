@@ -35,3 +35,8 @@ QueueHandle_t device_manager_get_capture_queue(void);
 QueueHandle_t device_manager_get_upload_queue(void);
 uint32_t device_manager_capture_drop_count(void);
 uint32_t device_manager_upload_drop_count(void);
+uint16_t device_manager_registered_count(void);
+uint16_t device_manager_broadcasting_count(void);
+uint32_t device_manager_ui_queue_depth(void);
+uint32_t device_manager_capture_queue_depth(void);
+uint32_t device_manager_upload_queue_depth(void);

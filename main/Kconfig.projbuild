@@ -1,0 +1,13 @@
+menu "BLE Gateway diagnostics"
+
+config BLE_GATEWAY_SYS_TASKS_ENABLED
+    bool "Enable the sys tasks console command"
+    default n
+    select FREERTOS_USE_TRACE_FACILITY
+    select FREERTOS_GENERATE_RUN_TIME_STATS
+    help
+        Enables the optional `sys tasks` command. The command prints a
+        point-in-time task, CPU share, and stack high-water-mark snapshot for
+        field diagnostics. Keep this disabled in the normal release build.
+
+endmenu

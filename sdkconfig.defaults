@@ -1,76 +1,174 @@
-# CoreS3-SE BLE gateway defaults.
+# This file was generated using idf.py save-defconfig or menuconfig [D] key. It can be edited manually.
+# Espressif IoT Development Framework (ESP-IDF) 5.5.5 Project Minimal Configuration
+#
+CONFIG_IDF_TARGET="esp32s3"
+
+#
+# Serial flasher config
+#
+CONFIG_ESPTOOLPY_FLASH_MODE_AUTO_DETECT=n
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+# end of Serial flasher config
+
+#
+# Partition Table
+#
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v1/16m.csv"
+# end of Partition Table
+
+#
+# BLE Gateway diagnostics
+#
+CONFIG_BLE_GATEWAY_SYS_TASKS_ENABLED=y
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+# end of BLE Gateway diagnostics
+
+#
+# Component config
+#
+
+#
+# Bluetooth
+#
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
-CONFIG_ESP_CONSOLE_UART_DEFAULT=n
 
-# Keep the CoreS3 LVGL draw buffer within the internal DMA heap.
-# This matches the official CoreS3 demo's single 20-line buffer.
-CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=20
-CONFIG_BSP_LCD_DRAW_BUF_DOUBLE=n
+#
+# NimBLE Options
+#
 
-# BLE scan, LCD and SD already use much of the ESP32-S3 internal RAM.
-# Keep Wi-Fi/LwIP allocations in the 8 MiB PSRAM and use conservative
-# buffer counts; gateway traffic is small MQTT telemetry, not bulk data.
-CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
-CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=2
-CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=2
-CONFIG_ESP_WIFI_STATIC_TX_BUFFER=y
-CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=2
-CONFIG_ESP_WIFI_CACHE_TX_BUFFER_NUM=2
-CONFIG_ESP_WIFI_RX_MGMT_BUF_NUM_DEF=1
-CONFIG_ESP_WIFI_MGMT_SBUF_NUM=6
-CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
-CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
-CONFIG_ESP_WIFI_ENABLE_WPA3_SAE=n
-CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
-CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
-
-# This firmware only receives BLE advertisements.  Do not reserve memory for
-# connections, GATT servers/clients, pairing or built-in services.
+#
+# General
+#
 CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+# end of General
+
+#
+# Roles and Profiles
+#
 CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
 CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
 CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
-CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
-# This gateway only observes advertisements.  Do not reserve host resources
-# for radio test procedures, random-address privacy, or connection retries.
-CONFIG_BT_NIMBLE_DTM_MODE_TEST=n
-CONFIG_BT_NIMBLE_HS_PVCY=n
-CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n
-CONFIG_BT_CTRL_DTM_ENABLE=n
-# Continuously scan target broadcasters. Controller-side address duplicate
-# filtering is refreshed once per second so last_seen_at remains current.
-CONFIG_BT_CTRL_BLE_SCAN_DUPL=y
-CONFIG_BT_CTRL_SCAN_DUPL_TYPE_DEVICE=y
-CONFIG_BT_CTRL_SCAN_DUPL_CACHE_SIZE=256
-CONFIG_BT_CTRL_DUPL_SCAN_CACHE_REFRESH_PERIOD=1
-CONFIG_BT_NIMBLE_GATT_CLIENT=n
-CONFIG_BT_NIMBLE_GATT_SERVER=n
+# end of Roles and Profiles
+
+#
+# Security (SMP)
+#
 CONFIG_BT_NIMBLE_SECURITY_ENABLE=n
-CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU=64
+# end of Security (SMP)
+
+#
+# GAP
+#
+CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n
+CONFIG_BT_NIMBLE_HS_PVCY=n
+CONFIG_BT_NIMBLE_MAX_CCCDS=1
+# end of GAP
+
+#
+# Memory Settings
+#
 CONFIG_BT_NIMBLE_MSYS_1_BLOCK_COUNT=4
 CONFIG_BT_NIMBLE_MSYS_2_BLOCK_COUNT=8
 CONFIG_BT_NIMBLE_TRANSPORT_ACL_FROM_LL_COUNT=6
 CONFIG_BT_NIMBLE_TRANSPORT_EVT_COUNT=10
 CONFIG_BT_NIMBLE_TRANSPORT_EVT_DISCARD_COUNT=4
-CONFIG_BT_NIMBLE_PROX_SERVICE=n
-CONFIG_BT_NIMBLE_ANS_SERVICE=n
-CONFIG_BT_NIMBLE_CTS_SERVICE=n
-CONFIG_BT_NIMBLE_HTP_SERVICE=n
-CONFIG_BT_NIMBLE_IPSS_SERVICE=n
-CONFIG_BT_NIMBLE_TPS_SERVICE=n
-CONFIG_BT_NIMBLE_IAS_SERVICE=n
-CONFIG_BT_NIMBLE_LLS_SERVICE=n
-CONFIG_BT_NIMBLE_SPS_SERVICE=n
-CONFIG_BT_NIMBLE_HR_SERVICE=n
-CONFIG_BT_NIMBLE_BAS_SERVICE=n
-CONFIG_BT_NIMBLE_DIS_SERVICE=n
-CONFIG_BT_NIMBLE_GAP_SERVICE=n
-# FATFS buffers are used by the SPI SD card driver. Keep the sector small so
-# its transient internal-DMA bounce buffer stays small while Wi-Fi is active.
-# The persistent FATFS cache remains in PSRAM to preserve Wi-Fi RX memory.
+# end of Memory Settings
+
+#
+# Extra Features
+#
+CONFIG_BT_NIMBLE_DTM_MODE_TEST=n
+# end of Extra Features
+# end of NimBLE Options
+
+#
+# Controller Options
+#
+CONFIG_BT_CTRL_SCAN_DUPL_CACHE_SIZE=256
+CONFIG_BT_CTRL_DUPL_SCAN_CACHE_REFRESH_PERIOD=1
+CONFIG_BT_CTRL_DTM_ENABLE=n
+# end of Controller Options
+# end of Bluetooth
+
+#
+# ESP PSRAM
+#
+CONFIG_SPIRAM=y
+
+#
+# SPI RAM config
+#
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# end of SPI RAM config
+# end of ESP PSRAM
+
+#
+# ESP System Settings
+#
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_INT_WDT_TIMEOUT_MS=300
+# end of ESP System Settings
+
+#
+# Wi-Fi
+#
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=2
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=2
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=2
+CONFIG_ESP_WIFI_CACHE_TX_BUFFER_NUM=2
+CONFIG_ESP_WIFI_RX_MGMT_BUF_NUM_DEF=1
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+CONFIG_ESP_WIFI_MGMT_SBUF_NUM=6
+CONFIG_ESP_WIFI_ENABLE_WPA3_SAE=n
+CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA=n
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
+CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
+# end of Wi-Fi
+
+#
+# FAT Filesystem support
+#
 CONFIG_FATFS_SECTOR_512=y
-# CONFIG_FATFS_SECTOR_4096 is not set
-# CONFIG_FATFS_PER_FILE_CACHE is not set
-CONFIG_FATFS_ALLOC_PREFER_EXTRAM=y
+CONFIG_FATFS_PER_FILE_CACHE=n
+# end of FAT Filesystem support
+
+#
+# FreeRTOS
+#
+
+#
+# Kernel
+#
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS=y
+# end of Kernel
+# end of FreeRTOS
+
+#
+# LWIP
+#
+
+#
+# TCP
+#
+CONFIG_LWIP_TCP_OOSEQ_MAX_PBUFS=4
+# end of TCP
+# end of LWIP
+
+#
+# Board Support Package (M5Stack Core S3)
+#
+
+#
+# Display
+#
+CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=20
+CONFIG_BSP_LCD_DRAW_BUF_DOUBLE=n
+# end of Display
+# end of Board Support Package (M5Stack Core S3)
