@@ -33,6 +33,12 @@ CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
 CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
 CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
 CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
+# This gateway only observes advertisements.  Do not reserve host resources
+# for radio test procedures, random-address privacy, or connection retries.
+CONFIG_BT_NIMBLE_DTM_MODE_TEST=n
+CONFIG_BT_NIMBLE_HS_PVCY=n
+CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n
+CONFIG_BT_CTRL_DTM_ENABLE=n
 # Continuously scan target broadcasters. Controller-side address duplicate
 # filtering is refreshed once per second so last_seen_at remains current.
 CONFIG_BT_CTRL_BLE_SCAN_DUPL=y

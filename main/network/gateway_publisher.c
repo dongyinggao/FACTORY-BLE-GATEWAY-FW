@@ -31,9 +31,6 @@ static void report_memory_health(void)
     if (dma_free < 24576U || dma_largest < 16384U) {
         ESP_LOGW(TAG, "memory headroom low: dma_free=%u dma_largest=%u psram_free=%u",
                  (unsigned int)dma_free, (unsigned int)dma_largest, (unsigned int)psram_free);
-    } else {
-        ESP_LOGI(TAG, "memory: dma_free=%u dma_largest=%u psram_free=%u",
-                 (unsigned int)dma_free, (unsigned int)dma_largest, (unsigned int)psram_free);
     }
 }
 
