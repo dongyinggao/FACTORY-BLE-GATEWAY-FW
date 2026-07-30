@@ -10,23 +10,26 @@
 #include "bsp/m5stack_core_s3.h"
 #include "esp_log.h"
 
-#include "csv_logger.h"
 #include "outbox_core.h"
+#include "storage_manager.h"
 
 #define OUTBOX_DIR BSP_SD_MOUNT_POINT "/outbox"
 #define OUTBOX_SEGMENT_BYTES (256U * 1024U)
 #define OUTBOX_MAX_BYTES (256U * 1024U * 1024U)
 #define OUTBOX_HEALTH_FILE OUTBOX_DIR "/HEALTH.LOG"
 #define OUTBOX_HEALTH_NEXT_FILE OUTBOX_DIR "/HEALTH.NXT"
+
 static const char *TAG = "outbox";
 static bool ready;
-static FILE *read_file;
 static char read_path[64];
+static long read_offset;
+static long current_next_offset;
 static bool current_inflight;
 static bool current_health;
 static gateway_outbox_core_t core;
 static unsigned long append_segment_id;
 static uint32_t append_segment_size;
+static uint32_t recovered_generation;
 
 static uint32_t count_segment_messages(const char *path)
 {
@@ -35,20 +38,37 @@ static uint32_t count_segment_messages(const char *path)
     uint32_t count = 0;
 
     file = fopen(path, "r");
-    if (file == NULL) return 0;
-    while (fgets(line, sizeof(line), file) != NULL) ++count;
+    if (file == NULL) {
+        return 0;
+    }
+    while (fgets(line, sizeof(line), file) != NULL) {
+        ++count;
+    }
     fclose(file);
     return count;
 }
+
 static bool oldest_segment(char path[64])
 {
-    DIR *dir; struct dirent *entry; unsigned long selected=0; unsigned long value;
-    dir=opendir(OUTBOX_DIR); if (!dir) return false;
-    while ((entry=readdir(dir)) != NULL) {
-        if (sscanf(entry->d_name, "OB%5lu.LOG", &value) == 1 && (selected == 0 || value < selected)) selected=value;
+    DIR *dir;
+    struct dirent *entry;
+    unsigned long selected = 0;
+    unsigned long value;
+
+    dir = opendir(OUTBOX_DIR);
+    if (dir == NULL) {
+        return false;
+    }
+    while ((entry = readdir(dir)) != NULL) {
+        if (sscanf(entry->d_name, "OB%5lu.LOG", &value) == 1 &&
+            (selected == 0 || value < selected)) {
+            selected = value;
+        }
     }
     closedir(dir);
-    if (selected == 0) return false;
+    if (selected == 0) {
+        return false;
+    }
     snprintf(path, 64, OUTBOX_DIR "/OB%05lu.LOG", selected);
     return true;
 }
@@ -62,6 +82,16 @@ static unsigned long path_segment_id(const char *path)
         (void)sscanf(name + 1, "OB%5lu.LOG", &value);
     }
     return value;
+}
+
+static void storage_failure_locked(const char *message)
+{
+    gateway_outbox_core_record_failure(&core);
+    ready = false;
+    current_inflight = false;
+    current_health = false;
+    storage_manager_report_io_failure();
+    ESP_LOGE(TAG, "%s", message);
 }
 
 static bool write_durable_file(const char *path, const char *json)
@@ -78,161 +108,307 @@ static bool write_durable_file(const char *path, const char *json)
     return ok;
 }
 
-static void promote_next_health(void)
+static bool promote_next_health_locked(void)
 {
     if (access(OUTBOX_HEALTH_FILE, F_OK) != 0 && access(OUTBOX_HEALTH_NEXT_FILE, F_OK) == 0 &&
         rename(OUTBOX_HEALTH_NEXT_FILE, OUTBOX_HEALTH_FILE) != 0) {
-        ESP_LOGE(TAG, "unable to promote pending health record");
-        gateway_outbox_core_record_failure(&core);
-    }
-}
-
-static bool append_segment(const char *json)
-{
-    char path[64]; FILE *file; size_t bytes;
-
-    bytes = strlen(json) + 1U;
-    if (!gateway_outbox_core_can_append(&core, (uint32_t)bytes)) {
-        ESP_LOGE(TAG, "outbox full; broadcast event cannot be persisted");
-        gateway_outbox_core_record_failure(&core);
-        return false;
-    }
-    if (append_segment_id == 0) append_segment_id = 1;
-    if (append_segment_size + bytes > OUTBOX_SEGMENT_BYTES ||
-        (read_file != NULL && append_segment_id == path_segment_id(read_path))) {
-        ++append_segment_id;
-        append_segment_size = 0;
-    }
-    snprintf(path,sizeof(path),OUTBOX_DIR "/OB%05lu.LOG",append_segment_id);
-    file=fopen(path,"a"); if (!file) return false;
-    bool ok=fputs(json,file)>=0 && fputc('\n',file)!=EOF && fflush(file)==0 && fsync(fileno(file))==0;
-    fclose(file);
-    if (ok) {
-        gateway_outbox_core_record_append(&core, (uint32_t)bytes);
-        append_segment_size += (uint32_t)bytes;
-    } else {
-        gateway_outbox_core_record_failure(&core);
-        ESP_LOGE(TAG, "broadcast persistence failed");
-    }
-    return ok;
-}
-void gateway_outbox_init(void)
-{
-    DIR *dir; struct dirent *entry; struct stat st; char path[96]; unsigned long value;
-    ready=csv_logger_is_ready();
-    if (!ready) { ESP_LOGW(TAG,"SD unavailable; real-time MQTT only"); return; }
-    if (mkdir(OUTBOX_DIR,0775) && errno != EEXIST) { ready=false; ESP_LOGE(TAG,"cannot create outbox directory"); return; }
-    if (read_file != NULL) {
-        fclose(read_file);
-        read_file = NULL;
-    }
-    read_path[0] = '\0';
-    current_inflight = false;
-    current_health = false;
-    gateway_outbox_core_init(&core, OUTBOX_MAX_BYTES);
-    append_segment_id = 0;
-    append_segment_size = 0;
-    dir = opendir(OUTBOX_DIR);
-    if (dir != NULL) {
-        while ((entry = readdir(dir)) != NULL) {
-            snprintf(path, sizeof(path), OUTBOX_DIR "/%s", entry->d_name);
-            if (stat(path, &st) || !S_ISREG(st.st_mode)) continue;
-            if (sscanf(entry->d_name, "OB%5lu.LOG", &value) == 1) {
-                gateway_outbox_core_recover_segment(&core, (uint32_t)st.st_size,
-                                                    count_segment_messages(path));
-                if (value >= append_segment_id) {
-                    append_segment_id = value;
-                    append_segment_size = (uint32_t)st.st_size;
-                }
-            }
-        }
-        closedir(dir);
-    }
-    promote_next_health();
-    ESP_LOGI(TAG, "outbox recovered; %lu bytes, %lu messages",
-             (unsigned long)core.stored_bytes, (unsigned long)core.pending_messages);
-}
-bool gateway_outbox_is_ready(void) { return ready; }
-bool gateway_outbox_enqueue_broadcast(const char *json) { return ready && json && append_segment(json); }
-bool gateway_outbox_store_health(const char *json)
-{
-    const char *path;
-
-    if (!ready || json == NULL) {
-        return false;
-    }
-    path = current_inflight && current_health ? OUTBOX_HEALTH_NEXT_FILE : OUTBOX_HEALTH_FILE;
-    if (!write_durable_file(path, json)) {
-        gateway_outbox_core_record_failure(&core);
-        ESP_LOGE(TAG, "health persistence failed");
+        storage_failure_locked("unable to promote pending health record");
         return false;
     }
     return true;
 }
+
+static void recover_locked(void)
+{
+    DIR *dir;
+    struct dirent *entry;
+    struct stat st;
+    char path[96];
+    unsigned long value;
+    uint32_t failures = core.failure_count;
+
+    ready = false;
+    read_path[0] = '\0';
+    read_offset = 0;
+    current_next_offset = 0;
+    current_inflight = false;
+    current_health = false;
+    gateway_outbox_core_init(&core, OUTBOX_MAX_BYTES);
+    core.failure_count = failures;
+    append_segment_id = 0;
+    append_segment_size = 0;
+
+    if (mkdir(OUTBOX_DIR, 0775) != 0 && errno != EEXIST) {
+        storage_failure_locked("cannot create outbox directory");
+        return;
+    }
+    dir = opendir(OUTBOX_DIR);
+    if (dir == NULL) {
+        storage_failure_locked("cannot open outbox directory");
+        return;
+    }
+    while ((entry = readdir(dir)) != NULL) {
+        snprintf(path, sizeof(path), OUTBOX_DIR "/%s", entry->d_name);
+        if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+            continue;
+        }
+        if (sscanf(entry->d_name, "OB%5lu.LOG", &value) == 1) {
+            gateway_outbox_core_recover_segment(&core, (uint32_t)st.st_size,
+                                                count_segment_messages(path));
+            if (value >= append_segment_id) {
+                append_segment_id = value;
+                append_segment_size = (uint32_t)st.st_size;
+            }
+        }
+    }
+    closedir(dir);
+    if (!promote_next_health_locked()) {
+        return;
+    }
+    ready = true;
+    recovered_generation = storage_manager_generation();
+    ESP_LOGI(TAG, "outbox recovered; %lu bytes, %lu messages", (unsigned long)core.stored_bytes,
+             (unsigned long)core.pending_messages);
+}
+
+static void sync_storage_locked(void)
+{
+    if (storage_manager_generation() != recovered_generation) {
+        recover_locked();
+    }
+}
+
+static bool append_segment_locked(const char *json)
+{
+    char path[64];
+    FILE *file;
+    size_t bytes = strlen(json) + 1U;
+    bool ok;
+
+    if (!gateway_outbox_core_can_append(&core, (uint32_t)bytes)) {
+        gateway_outbox_core_record_failure(&core);
+        ESP_LOGE(TAG, "outbox full; broadcast event cannot be persisted");
+        return false;
+    }
+    if (append_segment_id == 0) {
+        append_segment_id = 1;
+    }
+    if (append_segment_size + bytes > OUTBOX_SEGMENT_BYTES ||
+        (read_path[0] != '\0' && append_segment_id == path_segment_id(read_path))) {
+        ++append_segment_id;
+        append_segment_size = 0;
+    }
+    snprintf(path, sizeof(path), OUTBOX_DIR "/OB%05lu.LOG", append_segment_id);
+    file = fopen(path, "a");
+    if (file == NULL) {
+        storage_failure_locked("unable to open broadcast segment");
+        return false;
+    }
+    ok = fputs(json, file) >= 0 && fputc('\n', file) != EOF && fflush(file) == 0 &&
+         fsync(fileno(file)) == 0;
+    fclose(file);
+    if (!ok) {
+        storage_failure_locked("broadcast persistence failed");
+        return false;
+    }
+    gateway_outbox_core_record_append(&core, (uint32_t)bytes);
+    append_segment_size += (uint32_t)bytes;
+    return true;
+}
+
+void gateway_outbox_init(void)
+{
+    gateway_outbox_sync_storage();
+}
+
+void gateway_outbox_sync_storage(void)
+{
+    if (!storage_manager_lock()) {
+        ready = false;
+        return;
+    }
+    sync_storage_locked();
+    storage_manager_unlock();
+}
+
+bool gateway_outbox_is_ready(void)
+{
+    return ready && storage_manager_is_ready();
+}
+
+bool gateway_outbox_enqueue_broadcast(const char *json)
+{
+    bool result;
+
+    if (json == NULL || !storage_manager_lock()) {
+        return false;
+    }
+    sync_storage_locked();
+    result = ready && append_segment_locked(json);
+    storage_manager_unlock();
+    return result;
+}
+
+bool gateway_outbox_store_health(const char *json)
+{
+    const char *path;
+    bool result;
+
+    if (json == NULL || !storage_manager_lock()) {
+        return false;
+    }
+    sync_storage_locked();
+    if (!ready) {
+        storage_manager_unlock();
+        return false;
+    }
+    path = current_inflight && current_health ? OUTBOX_HEALTH_NEXT_FILE : OUTBOX_HEALTH_FILE;
+    result = write_durable_file(path, json);
+    if (!result) {
+        storage_failure_locked("health persistence failed");
+    }
+    storage_manager_unlock();
+    return result;
+}
+
 bool gateway_outbox_next(char output[OUTBOX_MESSAGE_MAX_LEN], bool *is_health)
 {
-    char path[64]; FILE *health;
-    if (!ready || current_inflight) return false;
-    if (read_file == NULL && oldest_segment(path)) { snprintf(read_path,sizeof(read_path),"%s",path); read_file=fopen(read_path,"r"); }
-    if (read_file != NULL) {
-        if (fgets(output,OUTBOX_MESSAGE_MAX_LEN,read_file) != NULL) { output[strcspn(output,"\r\n")]='\0'; current_inflight=true; current_health=false; *is_health=false; return true; }
-        struct stat st;
-        fclose(read_file); read_file=NULL;
-        if (!stat(read_path, &st)) {
-            gateway_outbox_core_remove_segment(&core, (uint32_t)st.st_size);
-        }
-        if (strstr(read_path, "OB") != NULL && append_segment_id != 0) {
-            unsigned long value;
-            if (sscanf(strrchr(read_path, '/') + 1, "OB%5lu.LOG", &value) == 1 && value == append_segment_id) append_segment_size = 0;
-        }
-        unlink(read_path); read_path[0]='\0'; return gateway_outbox_next(output,is_health);
+    char path[64];
+    FILE *file;
+    struct stat st;
+
+    if (output == NULL || is_health == NULL || !storage_manager_lock()) {
+        return false;
     }
-    promote_next_health();
-    health=fopen(OUTBOX_HEALTH_FILE,"r"); if (health && fgets(output,OUTBOX_MESSAGE_MAX_LEN,health)) { fclose(health); output[strcspn(output,"\r\n")]='\0'; current_inflight=true; current_health=true; *is_health=true; return true; }
-    if (health) fclose(health);
+    sync_storage_locked();
+    if (!ready || current_inflight) {
+        storage_manager_unlock();
+        return false;
+    }
+    while (true) {
+        if (read_path[0] == '\0') {
+            if (!oldest_segment(path)) {
+                break;
+            }
+            snprintf(read_path, sizeof(read_path), "%s", path);
+            read_offset = 0;
+        }
+        file = fopen(read_path, "r");
+        if (file == NULL || fseek(file, read_offset, SEEK_SET) != 0) {
+            if (file != NULL) {
+                fclose(file);
+            }
+            storage_failure_locked("unable to read outbox segment");
+            storage_manager_unlock();
+            return false;
+        }
+        if (fgets(output, OUTBOX_MESSAGE_MAX_LEN, file) != NULL) {
+            current_next_offset = ftell(file);
+            fclose(file);
+            output[strcspn(output, "\r\n")] = '\0';
+            current_inflight = true;
+            current_health = false;
+            *is_health = false;
+            storage_manager_unlock();
+            return true;
+        }
+        fclose(file);
+        if (stat(read_path, &st) != 0 || unlink(read_path) != 0) {
+            storage_failure_locked("unable to remove acknowledged outbox segment");
+            storage_manager_unlock();
+            return false;
+        }
+        gateway_outbox_core_remove_segment(&core, (uint32_t)st.st_size);
+        if (append_segment_id == path_segment_id(read_path)) {
+            append_segment_size = 0;
+        }
+        read_path[0] = '\0';
+        read_offset = 0;
+    }
+    if (!promote_next_health_locked()) {
+        storage_manager_unlock();
+        return false;
+    }
+    file = fopen(OUTBOX_HEALTH_FILE, "r");
+    if (file != NULL && fgets(output, OUTBOX_MESSAGE_MAX_LEN, file) != NULL) {
+        fclose(file);
+        output[strcspn(output, "\r\n")] = '\0';
+        current_inflight = true;
+        current_health = true;
+        *is_health = true;
+        storage_manager_unlock();
+        return true;
+    }
+    if (file != NULL) {
+        fclose(file);
+    }
+    storage_manager_unlock();
     return false;
 }
+
 void gateway_outbox_ack_current(void)
 {
     if (!current_inflight) {
         return;
     }
+    if (!storage_manager_lock()) {
+        current_inflight = false;
+        current_health = false;
+        return;
+    }
+    sync_storage_locked();
+    if (!ready) {
+        storage_manager_unlock();
+        current_inflight = false;
+        current_health = false;
+        return;
+    }
     if (current_health) {
         if (unlink(OUTBOX_HEALTH_FILE) != 0 && errno != ENOENT) {
-            ESP_LOGE(TAG, "unable to acknowledge health record");
-            gateway_outbox_core_record_failure(&core);
+            storage_failure_locked("unable to acknowledge health record");
+        } else {
+            (void)promote_next_health_locked();
         }
-        promote_next_health();
     } else {
+        read_offset = current_next_offset;
         gateway_outbox_core_ack_broadcast(&core);
     }
-    current_health = false;
     current_inflight = false;
+    current_health = false;
+    storage_manager_unlock();
 }
 
 void gateway_outbox_release_current(void)
 {
-    if (read_file != NULL) {
-        fclose(read_file);
-        read_file = fopen(read_path, "r");
-        if (read_file == NULL) {
-            ESP_LOGE(TAG, "unable to reopen outbox segment");
-            gateway_outbox_core_record_failure(&core);
-        }
-    }
-    current_health = false;
     current_inflight = false;
+    current_health = false;
 }
+
 uint32_t gateway_outbox_pending_count(void)
 {
-    return ready ? core.pending_messages : 0;
+    return core.pending_messages;
 }
-uint32_t gateway_outbox_pending_bytes(void) { return ready ? core.stored_bytes : 0; }
-uint32_t gateway_outbox_failure_count(void) { return core.failure_count; }
+
+uint32_t gateway_outbox_pending_bytes(void)
+{
+    return core.stored_bytes;
+}
+
+uint32_t gateway_outbox_failure_count(void)
+{
+    return core.failure_count;
+}
+
 const char *gateway_outbox_status_text(void)
 {
-    if (!ready) return "No SD";
-    if (core.stored_bytes >= core.capacity_bytes) return "Full";
-    if (core.failure_count > 0) return "Error";
+    if (!gateway_outbox_is_ready()) {
+        return "No SD";
+    }
+    if (core.stored_bytes >= core.capacity_bytes) {
+        return "Full";
+    }
+    if (core.failure_count > 0) {
+        return "Error";
+    }
     return "Ready";
 }

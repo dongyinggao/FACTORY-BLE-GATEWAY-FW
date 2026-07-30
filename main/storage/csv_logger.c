@@ -2,7 +2,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -14,14 +13,13 @@
 #include "device_manager.h"
 #include "csv_formatter.h"
 #include "gateway_config.h"
+#include "storage_manager.h"
 
 static const char *TAG = "csv_logger";
 static const char *CSV_HEADER =
     "timestamp,time_synced,event_uptime_s,broadcast_started_uptime_s,last_seen_uptime_s,"
     "end_detected_uptime_s,gateway_id,gateway_location,device_id,device_name,mac,address_type,"
     "event,broadcast_started_at,last_seen_at,end_detected_at,rssi,scanner_state";
-static bool sd_ready;
-
 static void csv_write_event(const device_lifecycle_event_t *event)
 {
     const gateway_config_t *config = gateway_config_get();
@@ -45,7 +43,7 @@ static void csv_write_event(const device_lifecycle_event_t *event)
     };
     FILE *file;
 
-    if (!sd_ready) {
+    if (!storage_manager_lock()) {
         return;
     }
     memcpy(csv_event.name, event->name, sizeof(csv_event.name));
@@ -62,7 +60,8 @@ static void csv_write_event(const device_lifecycle_event_t *event)
 
     if (file == NULL) {
         ESP_LOGE(TAG, "unable to open CSV file");
-        sd_ready = false;
+        storage_manager_report_io_failure();
+        storage_manager_unlock();
         return;
     }
     if (ftell(file) == 0) {
@@ -76,13 +75,15 @@ static void csv_write_event(const device_lifecycle_event_t *event)
             snprintf(backup_path, sizeof(backup_path), BSP_SD_MOUNT_POINT "/data/%s.OLD", date_name);
             if (rename(path, backup_path) != 0) {
                 ESP_LOGE(TAG, "CSV schema mismatch; unable to preserve %s", path);
-                sd_ready = false;
+                storage_manager_report_io_failure();
+                storage_manager_unlock();
                 return;
             }
             file = fopen(path, "w");
             if (file == NULL) {
                 ESP_LOGE(TAG, "unable to create CSV file after schema migration");
-                sd_ready = false;
+                storage_manager_report_io_failure();
+                storage_manager_unlock();
                 return;
             }
             fprintf(file, "%s\n", CSV_HEADER);
@@ -92,14 +93,16 @@ static void csv_write_event(const device_lifecycle_event_t *event)
     if (csv_format_lifecycle_event(line, sizeof(line), &csv_event, config) < 0) {
         ESP_LOGE(TAG, "CSV record formatting failed");
         fclose(file);
+        storage_manager_unlock();
         return;
     }
     fputs(line, file);
     if (fflush(file) != 0 || fsync(fileno(file)) != 0) {
         ESP_LOGE(TAG, "CSV sync failed");
-        sd_ready = false;
+        storage_manager_report_io_failure();
     }
     fclose(file);
+    storage_manager_unlock();
 }
 
 static void csv_logger_task(void *parameter)
@@ -117,20 +120,10 @@ static void csv_logger_task(void *parameter)
 
 void csv_logger_start(void)
 {
-    esp_err_t result = bsp_sdcard_mount();
-
-    if (result != ESP_OK) {
-        ESP_LOGW(TAG, "SD card unavailable: %s", esp_err_to_name(result));
-        sd_ready = false;
-    } else {
-        mkdir(BSP_SD_MOUNT_POINT "/data", 0775);
-        sd_ready = true;
-        ESP_LOGI(TAG, "SD CSV logging ready at %s/data", BSP_SD_MOUNT_POINT);
-    }
     xTaskCreate(csv_logger_task, "csv_logger", 4096, NULL, 4, NULL);
 }
 
 bool csv_logger_is_ready(void)
 {
-    return sd_ready;
+    return storage_manager_is_ready();
 }

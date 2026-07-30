@@ -7,6 +7,7 @@
 #define OUTBOX_MESSAGE_MAX_LEN 768
 
 void gateway_outbox_init(void);
+void gateway_outbox_sync_storage(void);
 bool gateway_outbox_is_ready(void);
 bool gateway_outbox_enqueue_broadcast(const char *json);
 bool gateway_outbox_store_health(const char *json);

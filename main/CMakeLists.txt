@@ -7,6 +7,8 @@ idf_component_register(SRCS
                        "device/device_manager_core.c"
                        "storage/csv_formatter.c"
                        "storage/csv_logger.c"
+                       "storage/storage_manager.c"
+                       "storage/storage_state_core.c"
                        "storage/outbox.c"
                        "storage/outbox_core.c"
                        "config/gateway_config.c"
