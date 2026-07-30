@@ -24,3 +24,4 @@ typedef struct {
 void device_manager_init(void);
 QueueHandle_t device_manager_get_event_queue(void);
 QueueHandle_t device_manager_get_capture_queue(void);
+QueueHandle_t device_manager_get_upload_queue(void);

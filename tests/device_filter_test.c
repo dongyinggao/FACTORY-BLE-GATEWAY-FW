@@ -18,6 +18,16 @@ static void test_name_filter(void)
     assert(!device_filter_name_matches("SM_ICM2X"));
 }
 
+static void test_configured_rules_and_fallback(void)
+{
+    assert(device_filter_set_rules("SM_TEST*"));
+    assert(device_filter_name_matches("sm_test42"));
+    assert(!device_filter_name_matches("SM_ICM2"));
+    assert(!device_filter_set_rules("SM_TEST"));
+    assert(device_filter_name_matches("SM_ICM2"));
+    assert(device_filter_name_matches("SM_ICD8"));
+}
+
 static void test_name_copy(void)
 {
     char name[BLE_DEVICE_NAME_MAX_LEN];
@@ -35,6 +45,7 @@ static void test_name_copy(void)
 int main(void)
 {
     test_name_filter();
+    test_configured_rules_and_fallback();
     test_name_copy();
     puts("device_filter tests passed");
     return 0;

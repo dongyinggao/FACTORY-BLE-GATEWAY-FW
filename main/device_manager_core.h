@@ -17,6 +17,9 @@ typedef struct {
     uint32_t broadcast_started_ms;
     uint32_t last_seen_ms;
     uint32_t end_detected_ms;
+    uint32_t broadcast_started_wall_ms;
+    uint32_t last_seen_wall_ms;
+    uint32_t end_detected_wall_ms;
 } managed_device_t;
 
 typedef struct {
@@ -41,9 +44,11 @@ typedef enum {
 device_registry_result_t device_registry_process_report(device_registry_t *registry,
                                                         const ble_scan_report_t *report,
                                                         uint32_t now_ms,
+                                                        uint32_t wall_ms,
                                                         size_t *device_index);
 device_registry_result_t device_registry_mark_next_broadcast_ended(device_registry_t *registry,
                                                                     uint32_t now_ms,
+                                                                    uint32_t wall_ms,
                                                                     uint32_t timeout_ms,
                                                                     size_t *device_index);
 void device_observation_clock_init(device_observation_clock_t *clock, uint32_t wall_ms);
