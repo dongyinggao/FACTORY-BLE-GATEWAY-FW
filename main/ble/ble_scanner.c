@@ -22,6 +22,8 @@ static ble_scanner_state_t scanner_state;
 static uint8_t own_address_type;
 static uint32_t scanner_report_drop_count;
 static uint32_t scanner_queue_high_watermark;
+static uint32_t scanner_discovery_report_count;
+static uint32_t scanner_filter_match_count;
 
 static void scanner_track_queue_high_watermark(void)
 {
@@ -85,6 +87,7 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
 
     switch (event->type) {
     case BLE_GAP_EVENT_DISC:
+        ++scanner_discovery_report_count;
         rc = ble_hs_adv_parse_fields(&fields, event->disc.data, event->disc.length_data);
         if (rc != 0 || fields.name == NULL || fields.name_len == 0) {
             return 0;
@@ -95,6 +98,7 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
         if (!device_filter_name_matches(report.name)) {
             return 0;
         }
+        ++scanner_filter_match_count;
 
         memcpy(report.address, event->disc.addr.val, sizeof(report.address));
         report.address_type = event->disc.addr.type;
@@ -283,6 +287,16 @@ uint32_t ble_scanner_event_queue_high_watermark(void)
 uint32_t ble_scanner_report_drop_count(void)
 {
     return scanner_report_drop_count;
+}
+
+uint32_t ble_scanner_discovery_report_count(void)
+{
+    return scanner_discovery_report_count;
+}
+
+uint32_t ble_scanner_filter_match_count(void)
+{
+    return scanner_filter_match_count;
 }
 
 bool ble_scanner_submit_diagnostic_report(const ble_scan_report_t *report)

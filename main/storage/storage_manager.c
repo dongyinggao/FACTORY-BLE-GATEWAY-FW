@@ -19,6 +19,7 @@
 static const char *TAG = "storage_manager";
 static SemaphoreHandle_t storage_mutex;
 static storage_state_core_t storage_state;
+static esp_err_t storage_last_error = ESP_FAIL;
 
 static uint32_t uptime_s(void)
 {
@@ -52,6 +53,7 @@ static void try_mount_locked(void)
     }
     storage_state_core_mount_result(&storage_state, result == ESP_OK, uptime_s(),
                                     STORAGE_RETRY_DELAY_S);
+    storage_last_error = result;
     if (result == ESP_OK) {
         ESP_LOGI(TAG, "SD mounted at %s (generation %lu)", BSP_SD_MOUNT_POINT,
                  (unsigned long)storage_state.generation);
@@ -119,6 +121,7 @@ void storage_manager_unlock(void)
 void storage_manager_report_io_failure(void)
 {
     storage_state_core_mark_failed(&storage_state, uptime_s(), STORAGE_RETRY_DELAY_S);
+    storage_last_error = ESP_FAIL;
     device_manager_request_ui_status_refresh();
 }
 
@@ -130,4 +133,14 @@ bool storage_manager_is_ready(void)
 uint32_t storage_manager_generation(void)
 {
     return storage_state.generation;
+}
+
+const char *storage_manager_status_text(void)
+{
+    return storage_state.ready ? "OK" : "Retry";
+}
+
+esp_err_t storage_manager_last_error(void)
+{
+    return storage_state.ready ? ESP_OK : storage_last_error;
 }

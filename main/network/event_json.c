@@ -39,14 +39,31 @@ int gateway_json_encode_broadcast(char *out, size_t size, const gateway_broadcas
         !key_string(out,size,&used,"last_seen_at",m->last_seen_at,true) || !key_string(out,size,&used,"end_detected_at",m->end_detected_at,false) || !append(out,size,&used,"}")) return -1;
     return (int)used;
 }
-int gateway_json_encode_health(char *out, size_t size, const char *event_id, const gateway_config_t *c,
-                               uint32_t uptime_s, const char *wifi, const char *mqtt,
-                               const char *sntp, bool sd, uint32_t outbox, uint32_t outbox_bytes,
-                               uint32_t outbox_failures, uint32_t capture_dropped,
-                               uint32_t upload_dropped)
+int gateway_json_encode_health(char *out, size_t size, const gateway_health_message_t *m)
 {
     size_t used=0;
-    if (!out || !event_id || !c) return -1;
-    if (!append(out,size,&used,"{") || !key_string(out,size,&used,"message_type","gateway_health",true) || !key_string(out,size,&used,"event_id",event_id,true) || !key_string(out,size,&used,"gateway_id",c->gateway_id,true) || !append(out,size,&used,"\"uptime_s\":%lu,",(unsigned long)uptime_s) || !key_string(out,size,&used,"wifi",wifi,true) || !key_string(out,size,&used,"mqtt",mqtt,true) || !key_string(out,size,&used,"sntp",sntp,true) || !append(out,size,&used,"\"sd_ready\":%s,\"outbox_messages\":%lu,\"outbox_bytes\":%lu,\"outbox_failures\":%lu,\"capture_dropped\":%lu,\"upload_dropped\":%lu}",sd?"true":"false",(unsigned long)outbox,(unsigned long)outbox_bytes,(unsigned long)outbox_failures,(unsigned long)capture_dropped,(unsigned long)upload_dropped)) return -1;
+    if (!out || !m || !m->event_id || !m->config) return -1;
+    if (!append(out,size,&used,"{") ||
+        !key_string(out,size,&used,"message_type","gateway_health",true) ||
+        !key_string(out,size,&used,"event_id",m->event_id,true) ||
+        !key_string(out,size,&used,"gateway_id",m->config->gateway_id,true) ||
+        !append(out,size,&used,"\"uptime_s\":%lu,",(unsigned long)m->uptime_s) ||
+        !key_string(out,size,&used,"wifi",m->wifi,true) ||
+        !key_string(out,size,&used,"mqtt",m->mqtt,true) ||
+        !key_string(out,size,&used,"sntp",m->sntp,true) ||
+        !append(out,size,&used,"\"sd_ready\":%s,",m->sd_ready?"true":"false") ||
+        !key_string(out,size,&used,"sd_status",m->sd_status,true) ||
+        !append(out,size,&used,"\"sd_error\":%ld,\"outbox_messages\":%lu,\"outbox_bytes\":%lu,\"outbox_failures\":%lu,",
+                (long)m->sd_error, (unsigned long)m->outbox_messages,
+                (unsigned long)m->outbox_bytes, (unsigned long)m->outbox_failures) ||
+        !append(out,size,&used,"\"registered_devices\":%u,\"broadcasting_devices\":%u,\"scan_reports_30s\":%lu,\"filter_matched_30s\":%lu,",
+                (unsigned int)m->registered_devices, (unsigned int)m->broadcasting_devices,
+                (unsigned long)m->scan_reports_30s, (unsigned long)m->filter_matched_30s) ||
+        !append(out,size,&used,"\"queue_high_water\":{\"scan\":%lu,\"ui\":%lu,\"capture\":%lu,\"upload\":%lu},",
+                (unsigned long)m->scan_queue_high_water, (unsigned long)m->ui_queue_high_water,
+                (unsigned long)m->capture_queue_high_water, (unsigned long)m->upload_queue_high_water) ||
+        !append(out,size,&used,"\"dropped_events\":{\"scan\":%lu,\"ui\":%lu,\"capture\":%lu,\"upload\":%lu}}",
+                (unsigned long)m->scan_dropped, (unsigned long)m->ui_dropped,
+                (unsigned long)m->capture_dropped, (unsigned long)m->upload_dropped)) return -1;
     return (int)used;
 }

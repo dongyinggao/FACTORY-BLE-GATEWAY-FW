@@ -92,9 +92,10 @@ static void print_status(void)
              (unsigned long)device_manager_capture_drop_count(),
              (unsigned long)device_manager_upload_drop_count());
     print_status_row("Dropped events", value);
-    snprintf(value, sizeof(value), "%s (generation %lu)",
-             csv_logger_is_ready() ? "Ready" : "Retrying",
-             (unsigned long)storage_manager_generation());
+    snprintf(value, sizeof(value), "%s (generation %lu, error=%ld)",
+             storage_manager_status_text(),
+             (unsigned long)storage_manager_generation(),
+             (long)storage_manager_last_error());
     print_status_row("SD card", value);
     snprintf(value, sizeof(value), "Wi-Fi=%s, MQTT=%s, SNTP=%s",
              network_manager_status_text(), mqtt_service_status_text(), time_service_status_text());

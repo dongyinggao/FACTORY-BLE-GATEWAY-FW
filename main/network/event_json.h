@@ -23,13 +23,36 @@ typedef struct {
     char end_detected_at[32];
 } gateway_broadcast_message_t;
 
+typedef struct {
+    const char *event_id;
+    const gateway_config_t *config;
+    uint32_t uptime_s;
+    const char *wifi;
+    const char *mqtt;
+    const char *sntp;
+    bool sd_ready;
+    const char *sd_status;
+    int32_t sd_error;
+    uint32_t outbox_messages;
+    uint32_t outbox_bytes;
+    uint32_t outbox_failures;
+    uint16_t registered_devices;
+    uint16_t broadcasting_devices;
+    uint32_t scan_reports_30s;
+    uint32_t filter_matched_30s;
+    uint32_t scan_queue_high_water;
+    uint32_t ui_queue_high_water;
+    uint32_t capture_queue_high_water;
+    uint32_t upload_queue_high_water;
+    uint32_t scan_dropped;
+    uint32_t ui_dropped;
+    uint32_t capture_dropped;
+    uint32_t upload_dropped;
+} gateway_health_message_t;
+
 void gateway_event_id_make(char *output, size_t output_size, uint32_t boot_id, uint32_t sequence);
 int gateway_json_encode_broadcast(char *output, size_t output_size,
                                   const gateway_broadcast_message_t *message,
                                   const gateway_config_t *config);
-int gateway_json_encode_health(char *output, size_t output_size, const char *event_id,
-                               const gateway_config_t *config, uint32_t uptime_s,
-                               const char *wifi, const char *mqtt, const char *sntp,
-                               bool sd_ready, uint32_t outbox_messages, uint32_t outbox_bytes,
-                               uint32_t outbox_failures,
-                               uint32_t capture_dropped, uint32_t upload_dropped);
+int gateway_json_encode_health(char *output, size_t output_size,
+                               const gateway_health_message_t *message);
