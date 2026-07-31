@@ -12,7 +12,7 @@ idf_component_register(SRCS
                        "storage/outbox.c"
                        "storage/outbox_core.c"
                        "config/gateway_config.c"
-                       "config/system_console.c"
+                       "config/gateway_status_console.c"
                        "config/stress_console.c"
                        "network/event_json.c"
                        "network/gateway_publisher.c"
@@ -20,5 +20,5 @@ idf_component_register(SRCS
                        "network/mqtt_service.c"
                        "network/network_manager.c"
                        "network/time_service.c"
-                       PRIV_REQUIRES bt nvs_flash m5stack_core_s3 esp_wifi esp_netif esp_event console mqtt esp_timer
+                       PRIV_REQUIRES bt nvs_flash m5stack_core_s3 esp_wifi esp_netif esp_event console mqtt esp_timer system_diagnostics
                        INCLUDE_DIRS "app" "ble" "device" "storage" "config" "network")

@@ -1,25 +1,21 @@
-#include "system_console.h"
+#include "gateway_status_console.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #include "esp_console.h"
-#include "esp_heap_caps.h"
 #include "esp_timer.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #include "ble_scanner.h"
-#include "csv_logger.h"
 #include "device_manager.h"
 #include "gateway_config.h"
 #include "mqtt_service.h"
 #include "network_manager.h"
 #include "outbox.h"
 #include "storage_manager.h"
+#include "system_diagnostics.h"
 #include "time_service.h"
 
-#define SYSTEM_CONSOLE_MAX_TASKS 24U
 #define STATUS_VALUE_WIDTH 54
 
 static const char *scanner_state_text(ble_scanner_state_t state)
@@ -41,19 +37,6 @@ static const char *scanner_state_text(ble_scanner_state_t state)
 static void print_status_row(const char *name, const char *value)
 {
     printf("| %-18.18s | %-*.*s |\n", name, STATUS_VALUE_WIDTH, STATUS_VALUE_WIDTH, value);
-}
-
-static void print_memory_line(const char *name, uint32_t caps)
-{
-    size_t total = heap_caps_get_total_size(caps);
-    size_t free = heap_caps_get_free_size(caps);
-    size_t used = total >= free ? total - free : 0U;
-    size_t largest = heap_caps_get_largest_free_block(caps);
-    unsigned int used_tenths = total == 0U ? 0U : (unsigned int)((used * 1000U) / total);
-
-    printf("| %-14.14s | %10u | %5u.%1u | %10u | %10u | %10u |\n", name,
-           (unsigned int)used, used_tenths / 10U, used_tenths % 10U,
-           (unsigned int)free, (unsigned int)total, (unsigned int)largest);
 }
 
 static void print_status(void)
@@ -108,56 +91,6 @@ static void print_status(void)
     printf("+--------------------+--------------------------------------------------------+\n");
 }
 
-static void print_memory(void)
-{
-    printf("\nMemory usage\n");
-    printf("+----------------+------------+---------+------------+------------+------------+\n");
-    printf("| Pool           |   Used [B] |  Used %% |   Free [B] |  Total [B] |Largest [B] |\n");
-    printf("+----------------+------------+---------+------------+------------+------------+\n");
-    print_memory_line("internal", MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    print_memory_line("DMA internal", MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    print_memory_line("psram", MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    printf("+----------------+------------+---------+------------+------------+------------+\n");
-    printf("DMA internal is a capability subset of internal memory.\n");
-}
-
-#if CONFIG_BLE_GATEWAY_SYS_TASKS_ENABLED
-static const char *task_state_text(eTaskState state)
-{
-    static const char *const states[] = { "Running", "Ready", "Blocked", "Suspended", "Deleted", "Invalid" };
-
-    return state <= eInvalid ? states[state] : "Unknown";
-}
-
-static void print_tasks(void)
-{
-    static TaskStatus_t tasks[SYSTEM_CONSOLE_MAX_TASKS];
-    configRUN_TIME_COUNTER_TYPE total_runtime = 0;
-    UBaseType_t count = uxTaskGetSystemState(tasks, SYSTEM_CONSOLE_MAX_TASKS, &total_runtime);
-
-    printf("\nTask snapshot\n");
-    printf("+------------------+------------+----------+---------+------------------+\n");
-    printf("| Name             | State      | Priority | CPU %%   | Stack free [B]   |\n");
-    printf("+------------------+------------+----------+---------+------------------+\n");
-    for (UBaseType_t index = 0; index < count; ++index) {
-        unsigned int cpu_tenths = total_runtime == 0U ? 0U :
-                                  (unsigned int)(((uint64_t)tasks[index].ulRunTimeCounter * 1000U) /
-                                                 total_runtime);
-
-        printf("| %-16.16s | %-10.10s | %8u | %5u.%1u | %16u |\n", tasks[index].pcTaskName,
-               task_state_text(tasks[index].eCurrentState),
-               (unsigned int)tasks[index].uxCurrentPriority,
-               cpu_tenths / 10U, cpu_tenths % 10U,
-               (unsigned int)tasks[index].usStackHighWaterMark);
-    }
-    printf("+------------------+------------+----------+---------+------------------+\n");
-    printf("CPU %% is the runtime-statistics share since boot; totals may exceed 100%% on two cores.\n");
-    if (count == SYSTEM_CONSOLE_MAX_TASKS) {
-        printf("warning=task snapshot reached limit %u\n", SYSTEM_CONSOLE_MAX_TASKS);
-    }
-}
-#endif
-
 static int system_command(int argc, char **argv)
 {
     if (argc != 2) {
@@ -169,42 +102,27 @@ static int system_command(int argc, char **argv)
         return 0;
     }
     if (strcmp(argv[1], "mem") == 0) {
-        print_memory();
+        system_diagnostics_print_memory();
         return 0;
     }
     if (strcmp(argv[1], "tasks") == 0) {
-#if CONFIG_BLE_GATEWAY_SYS_TASKS_ENABLED
-        print_tasks();
-#else
-        printf("sys tasks is disabled; enable FreeRTOS Trace Facility and BLE Gateway diagnostics in menuconfig\n");
-#endif
+        if (system_diagnostics_print_tasks()) {
+            return 0;
+        }
+        printf("sys tasks is disabled; enable task diagnostics in menuconfig\n");
         return 0;
     }
     printf("usage: sys status | mem | tasks\n");
     return 1;
 }
 
-static int system_memory_command(int argc, char **argv)
-{
-    (void)argc;
-    (void)argv;
-    print_memory();
-    return 0;
-}
-
-void system_console_register(void)
+void gateway_status_console_register(void)
 {
     const esp_console_cmd_t system_command_definition = {
         .command = "sys",
-        .help = "read-only gateway diagnostics: status, mem, tasks",
+        .help = "gateway diagnostics: status, mem, tasks",
         .func = &system_command,
-    };
-    const esp_console_cmd_t memory_command_definition = {
-        .command = "sysmem",
-        .help = "alias for: sys mem",
-        .func = &system_memory_command,
     };
 
     (void)esp_console_cmd_register(&system_command_definition);
-    (void)esp_console_cmd_register(&memory_command_definition);
 }

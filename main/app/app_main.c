@@ -10,7 +10,8 @@
 #include "network_manager.h"
 #include "storage_manager.h"
 #include "stress_console.h"
-#include "system_console.h"
+#include "gateway_status_console.h"
+#include "system_diagnostics.h"
 #include "time_service.h"
 
 void app_main(void)
@@ -24,7 +25,8 @@ void app_main(void)
 
     gateway_config_init();
     gateway_config_console_start();
-    system_console_register();
+    system_diagnostics_register_console();
+    gateway_status_console_register();
     stress_console_register();
     time_service_init();
     ble_scanner_init();
