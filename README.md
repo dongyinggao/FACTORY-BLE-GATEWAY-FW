@@ -72,6 +72,22 @@ cfg show
 factory/product-status/gateway/<gateway_id>/events
 ```
 
+## 运行诊断命令
+
+诊断命令不会修改配置或影响扫描，可在 `esp>` 提示符下按需执行：
+
+```text
+sys status  # BLE、设备/队列、SD、网络、Outbox 状态
+sys mem     # 内部内存、DMA 内存与 PSRAM 的余量和最大片段
+sysmem      # `sys mem` 的快捷别名
+sys tasks   # 默认关闭；用于调试时输出任务与栈高水位
+```
+
+要启用 `sys tasks`，在 `idf.py menuconfig` 中启用
+`BLE Gateway diagnostics -> Enable the sys tasks console command`；该选项会自动开启
+所需的 FreeRTOS Trace Facility 与运行时间统计。任务表将显示 CPU 时间占比和栈高水位（字节）。
+该项不建议在现场正式版本中默认开启。
+
 ## 主机单元测试
 
 无需硬件即可运行纯逻辑测试：

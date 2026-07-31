@@ -94,7 +94,7 @@ void storage_manager_start(void)
     xSemaphoreTake(storage_mutex, portMAX_DELAY);
     try_mount_locked();
     xSemaphoreGive(storage_mutex);
-    xTaskCreate(storage_manager_task, "storage_mgr", 3072, NULL, 4, NULL);
+    xTaskCreate(storage_manager_task, "storage_mgr", 4096, NULL, 4, NULL);
 }
 
 bool storage_manager_lock(void)

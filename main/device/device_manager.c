@@ -18,6 +18,8 @@ static device_registry_t registry;
 static device_observation_clock_t observation_clock;
 static uint32_t capture_drop_count;
 static uint32_t upload_drop_count;
+static volatile uint16_t registered_count;
+static volatile uint16_t broadcasting_count;
 
 static uint32_t manager_now_ms(void)
 {
@@ -38,10 +40,12 @@ static uint16_t manager_device_count(bool broadcasting_only)
 
 static void manager_publish_ui(const managed_device_t *device)
 {
+    registered_count = manager_device_count(false);
+    broadcasting_count = manager_device_count(true);
     device_manager_ui_event_t event = {
         .type = DEVICE_MANAGER_EVENT_DEVICE_CHANGED,
-        .device_count = manager_device_count(false),
-        .broadcasting_count = manager_device_count(true),
+        .device_count = registered_count,
+        .broadcasting_count = broadcasting_count,
     };
 
     if (device != NULL) {
@@ -57,12 +61,14 @@ static void manager_publish_ui(const managed_device_t *device)
 
 static void manager_publish_scanner_state(const ble_scanner_event_t *scanner_event)
 {
+    registered_count = manager_device_count(false);
+    broadcasting_count = manager_device_count(true);
     device_manager_ui_event_t event = {
         .type = DEVICE_MANAGER_EVENT_SCANNER_STATE,
         .scanner_state = scanner_event->state,
         .error_code = scanner_event->error_code,
-        .device_count = manager_device_count(false),
-        .broadcasting_count = manager_device_count(true),
+        .device_count = registered_count,
+        .broadcasting_count = broadcasting_count,
     };
 
     if (xQueueSend(ui_event_queue, &event, 0) != pdTRUE) {
@@ -222,4 +228,29 @@ uint32_t device_manager_capture_drop_count(void)
 uint32_t device_manager_upload_drop_count(void)
 {
     return upload_drop_count;
+}
+
+uint16_t device_manager_registered_count(void)
+{
+    return registered_count;
+}
+
+uint16_t device_manager_broadcasting_count(void)
+{
+    return broadcasting_count;
+}
+
+uint32_t device_manager_ui_queue_depth(void)
+{
+    return ui_event_queue == NULL ? 0U : uxQueueMessagesWaiting(ui_event_queue);
+}
+
+uint32_t device_manager_capture_queue_depth(void)
+{
+    return capture_event_queue == NULL ? 0U : uxQueueMessagesWaiting(capture_event_queue);
+}
+
+uint32_t device_manager_upload_queue_depth(void)
+{
+    return upload_event_queue == NULL ? 0U : uxQueueMessagesWaiting(upload_event_queue);
 }
