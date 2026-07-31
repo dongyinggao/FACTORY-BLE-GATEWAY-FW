@@ -88,6 +88,25 @@ sys tasks   # 默认关闭；用于调试时输出任务与栈高水位
 所需的 FreeRTOS Trace Facility 与运行时间统计。任务表将显示 CPU 时间占比和栈高水位（字节）。
 该项不建议在现场正式版本中默认开启。
 
+### 128 台设备硬件链路压力测试
+
+`stress` 命令仅用于诊断固件。它会把 `SM_ICM9*`、`SM_ICD9*` 的合成广播报告投入与
+真实扫描相同的事件队列，因此会产生真实的 CSV、Outbox 与 MQTT 测试数据；不得在现场
+生产网关上启用。先在 `idf.py menuconfig` 中启用
+`BLE Gateway diagnostics -> Enable the stress console command`，重新编译烧录后执行：
+
+```text
+stress run 128 20  # 128 台合成设备，以每秒 20 个报告注入
+stress status      # 注入进度及四条队列的高水位
+stress stop        # 请求停止尚未注入的报告
+sys status         # 队列深度、高水位与丢弃计数
+```
+
+注入完成后，等待 `bcast_end_s` 超时以观察 128 个 `BROADCAST_ENDED` 事件。测试前应
+确认扫描处于 `Scanning` 状态。完整 128 台测试要求设备表为空：重启网关后不要让真实
+目标设备先广播，否则命令会根据剩余容量拒绝测试，避免把第 129 台的失败误判为性能问题。
+该命令的低优先级任务不会暂停或替代真实 BLE 扫描。
+
 ## 主机单元测试
 
 无需硬件即可运行纯逻辑测试：
@@ -96,7 +115,10 @@ sys tasks   # 默认关闭；用于调试时输出任务与栈高水位
 ./tests/run_host_tests.sh
 ```
 
-测试覆盖设备名称过滤、广播生命周期、CSV/JSON 编码和设备容量边界。
+测试覆盖设备名称过滤、广播生命周期、CSV/JSON 编码和设备容量边界。`128_device_stress`
+会构造 128 个不同 MAC 的有效广播，验证开始/结束事件、相同 MAC 的地址类型变化、
+第 129 台拒绝、Outbox/PUBACK 语义，以及 UI（32）和 CSV/上传（256）队列的满载边界。
+它是主机侧逻辑压力测试；真实 BLE 射频、SD 吞吐与 MQTT Broker 重传仍需硬件验收。
 
 ## 项目结构
 

@@ -21,6 +21,15 @@ static bool scan_cancel_pending;
 static ble_scanner_state_t scanner_state;
 static uint8_t own_address_type;
 static uint32_t scanner_report_drop_count;
+static uint32_t scanner_queue_high_watermark;
+
+static void scanner_track_queue_high_watermark(void)
+{
+    uint32_t depth = uxQueueMessagesWaiting(scanner_event_queue);
+    if (depth > scanner_queue_high_watermark) {
+        scanner_queue_high_watermark = depth;
+    }
+}
 
 static void scanner_publish_state(ble_scanner_state_t state, int error_code)
 {
@@ -32,7 +41,31 @@ static void scanner_publish_state(ble_scanner_state_t state, int error_code)
 
     if (xQueueSend(scanner_event_queue, &event, 0) != pdTRUE) {
         ESP_LOGW(TAG, "scanner event queue full; state event dropped");
+    } else {
+        scanner_track_queue_high_watermark();
     }
+}
+
+static bool scanner_enqueue_report(const ble_scan_report_t *report)
+{
+    ble_scanner_event_t scanner_event = {
+        .type = BLE_SCANNER_EVENT_REPORT,
+        .state = BLE_SCANNER_STATE_SCANNING,
+        .report = *report,
+    };
+
+    if (xQueueSend(scanner_event_queue, &scanner_event, 0) == pdTRUE) {
+        scanner_track_queue_high_watermark();
+        return true;
+    }
+
+    ++scanner_report_drop_count;
+    if (scanner_report_drop_count == 1U ||
+        (scanner_report_drop_count % 10U) == 0U) {
+        ESP_LOGW(TAG, "scanner event queue full; reports dropped=%lu",
+                 (unsigned long)scanner_report_drop_count);
+    }
+    return false;
 }
 
 static void scanner_set_state(ble_scanner_state_t state, int error_code)
@@ -66,19 +99,7 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
         memcpy(report.address, event->disc.addr.val, sizeof(report.address));
         report.address_type = event->disc.addr.type;
         report.rssi = event->disc.rssi;
-        ble_scanner_event_t scanner_event = {
-            .type = BLE_SCANNER_EVENT_REPORT,
-            .state = BLE_SCANNER_STATE_SCANNING,
-            .report = report,
-        };
-        if (xQueueSend(scanner_event_queue, &scanner_event, 0) != pdTRUE) {
-            ++scanner_report_drop_count;
-            if (scanner_report_drop_count == 1 ||
-                (scanner_report_drop_count % 10U) == 0U) {
-                ESP_LOGW(TAG, "scanner event queue full; reports dropped=%lu",
-                         (unsigned long)scanner_report_drop_count);
-            }
-        }
+        (void)scanner_enqueue_report(&report);
         return 0;
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
@@ -254,7 +275,20 @@ uint32_t ble_scanner_event_queue_depth(void)
     return scanner_event_queue == NULL ? 0U : uxQueueMessagesWaiting(scanner_event_queue);
 }
 
+uint32_t ble_scanner_event_queue_high_watermark(void)
+{
+    return scanner_queue_high_watermark;
+}
+
 uint32_t ble_scanner_report_drop_count(void)
 {
     return scanner_report_drop_count;
+}
+
+bool ble_scanner_submit_diagnostic_report(const ble_scan_report_t *report)
+{
+    if (report == NULL || scanner_event_queue == NULL) {
+        return false;
+    }
+    return scanner_enqueue_report(report);
 }

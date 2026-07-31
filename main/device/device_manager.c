@@ -18,6 +18,10 @@ static device_registry_t registry;
 static device_observation_clock_t observation_clock;
 static uint32_t capture_drop_count;
 static uint32_t upload_drop_count;
+static uint32_t ui_drop_count;
+static uint32_t ui_queue_high_watermark;
+static uint32_t capture_queue_high_watermark;
+static uint32_t upload_queue_high_watermark;
 static volatile uint16_t registered_count;
 static volatile uint16_t broadcasting_count;
 
@@ -38,6 +42,26 @@ static uint16_t manager_device_count(bool broadcasting_only)
     return count;
 }
 
+static void manager_track_queue_high_watermark(QueueHandle_t queue, uint32_t *high_watermark)
+{
+    uint32_t depth = uxQueueMessagesWaiting(queue);
+    if (depth > *high_watermark) {
+        *high_watermark = depth;
+    }
+}
+
+static void manager_enqueue_ui(const device_manager_ui_event_t *event)
+{
+    if (xQueueSend(ui_event_queue, event, 0) == pdTRUE) {
+        manager_track_queue_high_watermark(ui_event_queue, &ui_queue_high_watermark);
+        return;
+    }
+    ++ui_drop_count;
+    if (ui_drop_count == 1U || (ui_drop_count % 10U) == 0U) {
+        ESP_LOGW(TAG, "UI event queue full; events dropped=%lu", (unsigned long)ui_drop_count);
+    }
+}
+
 static void manager_publish_ui(const managed_device_t *device)
 {
     registered_count = manager_device_count(false);
@@ -54,9 +78,7 @@ static void manager_publish_ui(const managed_device_t *device)
         event.rssi = device->report.rssi;
         event.broadcasting = device->broadcasting;
     }
-    if (xQueueSend(ui_event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "UI event queue full; UI refresh skipped");
-    }
+    manager_enqueue_ui(&event);
 }
 
 static void manager_publish_scanner_state(const ble_scanner_event_t *scanner_event)
@@ -71,9 +93,7 @@ static void manager_publish_scanner_state(const ble_scanner_event_t *scanner_eve
         .broadcasting_count = broadcasting_count,
     };
 
-    if (xQueueSend(ui_event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "UI event queue full; scanner state skipped");
-    }
+    manager_enqueue_ui(&event);
 }
 
 static void manager_publish_lifecycle(device_lifecycle_event_type_t type,
@@ -96,10 +116,14 @@ static void manager_publish_lifecycle(device_lifecycle_event_type_t type,
     if (xQueueSend(capture_event_queue, &event, 0) != pdTRUE) {
         ++capture_drop_count;
         ESP_LOGE(TAG, "capture queue full; lifecycle event lost");
+    } else {
+        manager_track_queue_high_watermark(capture_event_queue, &capture_queue_high_watermark);
     }
     if (xQueueSend(upload_event_queue, &event, 0) != pdTRUE) {
         ++upload_drop_count;
         ESP_LOGE(TAG, "upload queue full; lifecycle event lost");
+    } else {
+        manager_track_queue_high_watermark(upload_event_queue, &upload_queue_high_watermark);
     }
 }
 
@@ -206,7 +230,7 @@ void device_manager_request_ui_status_refresh(void)
     };
 
     if (ui_event_queue != NULL) {
-        (void)xQueueSend(ui_event_queue, &event, 0);
+        manager_enqueue_ui(&event);
     }
 }
 
@@ -228,6 +252,11 @@ uint32_t device_manager_capture_drop_count(void)
 uint32_t device_manager_upload_drop_count(void)
 {
     return upload_drop_count;
+}
+
+uint32_t device_manager_ui_drop_count(void)
+{
+    return ui_drop_count;
 }
 
 uint16_t device_manager_registered_count(void)
@@ -253,4 +282,19 @@ uint32_t device_manager_capture_queue_depth(void)
 uint32_t device_manager_upload_queue_depth(void)
 {
     return upload_event_queue == NULL ? 0U : uxQueueMessagesWaiting(upload_event_queue);
+}
+
+uint32_t device_manager_ui_queue_high_watermark(void)
+{
+    return ui_queue_high_watermark;
+}
+
+uint32_t device_manager_capture_queue_high_watermark(void)
+{
+    return capture_queue_high_watermark;
+}
+
+uint32_t device_manager_upload_queue_high_watermark(void)
+{
+    return upload_queue_high_watermark;
 }

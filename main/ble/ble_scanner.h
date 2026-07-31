@@ -36,4 +36,8 @@ bool ble_scanner_is_enabled(void);
 ble_scanner_state_t ble_scanner_get_state(void);
 QueueHandle_t ble_scanner_get_event_queue(void);
 uint32_t ble_scanner_event_queue_depth(void);
+uint32_t ble_scanner_event_queue_high_watermark(void);
 uint32_t ble_scanner_report_drop_count(void);
+
+/* Diagnostic-only producer. It uses the same queue consumed by device_manager. */
+bool ble_scanner_submit_diagnostic_report(const ble_scan_report_t *report);
