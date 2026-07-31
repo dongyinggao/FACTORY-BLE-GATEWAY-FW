@@ -17,9 +17,9 @@
 
 static const char *TAG = "csv_logger";
 static const char *CSV_HEADER =
-    "timestamp,time_synced,event_uptime_s,broadcast_started_uptime_s,last_seen_uptime_s,"
-    "end_detected_uptime_s,gateway_id,gateway_location,device_id,device_name,mac,address_type,"
-    "event,broadcast_started_at,last_seen_at,end_detected_at,rssi,scanner_state";
+    "recorded_at,time_synced,event_uptime_s,gateway_id,gateway_location,device_mac,device_name,"
+    "event,broadcast_id,broadcast_started_at,broadcast_ended_at,broadcast_duration_s,"
+    "end_detected_at,last_rssi";
 static void csv_write_event(const device_lifecycle_event_t *event)
 {
     const gateway_config_t *config = gateway_config_get();
@@ -30,24 +30,15 @@ static void csv_write_event(const device_lifecycle_event_t *event)
     char header[256];
     time_t now;
     struct tm local_time;
-    csv_lifecycle_event_t csv_event = {
-        .type = event->type,
-        .address_type = event->address_type,
-        .rssi = event->rssi,
-        .broadcast_started_ms = event->broadcast_started_ms,
-        .last_seen_ms = event->last_seen_ms,
-        .end_detected_ms = event->end_detected_ms,
-        .broadcast_started_wall_ms = event->broadcast_started_wall_ms,
-        .last_seen_wall_ms = event->last_seen_wall_ms,
-        .end_detected_wall_ms = event->end_detected_wall_ms,
-    };
+    /* csv_lifecycle_event_t is the persisted view of the immutable lifecycle
+     * event. Copy the whole structure so future fields (for example
+     * broadcast_id) cannot be accidentally omitted during conversion. */
+    csv_lifecycle_event_t csv_event = *event;
     FILE *file;
 
     if (!storage_manager_lock()) {
         return;
     }
-    memcpy(csv_event.name, event->name, sizeof(csv_event.name));
-    memcpy(csv_event.address, event->address, sizeof(csv_event.address));
     now = time(NULL);
     localtime_r(&now, &local_time);
     if (local_time.tm_year + 1900 < 2024) {

@@ -1,9 +1,11 @@
 #include "device_manager.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/task.h"
@@ -22,6 +24,8 @@ static uint32_t ui_drop_count;
 static uint32_t ui_queue_high_watermark;
 static uint32_t capture_queue_high_watermark;
 static uint32_t upload_queue_high_watermark;
+static uint32_t broadcast_boot_id;
+static uint32_t broadcast_sequence;
 static volatile uint16_t registered_count;
 static volatile uint16_t broadcasting_count;
 
@@ -101,7 +105,6 @@ static void manager_publish_lifecycle(device_lifecycle_event_type_t type,
 {
     device_lifecycle_event_t event = {
         .type = type,
-        .address_type = device->report.address_type,
         .rssi = device->report.rssi,
         .broadcast_started_ms = device->broadcast_started_ms,
         .last_seen_ms = device->last_seen_ms,
@@ -110,6 +113,7 @@ static void manager_publish_lifecycle(device_lifecycle_event_type_t type,
         .last_seen_wall_ms = device->last_seen_wall_ms,
         .end_detected_wall_ms = device->end_detected_wall_ms,
     };
+    memcpy(event.broadcast_id, device->broadcast_id, sizeof(event.broadcast_id));
     memcpy(event.name, device->report.name, sizeof(event.name));
     memcpy(event.address, device->report.address, sizeof(event.address));
 
@@ -125,6 +129,13 @@ static void manager_publish_lifecycle(device_lifecycle_event_type_t type,
     } else {
         manager_track_queue_high_watermark(upload_event_queue, &upload_queue_high_watermark);
     }
+}
+
+static void manager_assign_broadcast_id(managed_device_t *device)
+{
+    ++broadcast_sequence;
+    snprintf(device->broadcast_id, sizeof(device->broadcast_id), "%08lX-%lu",
+             (unsigned long)broadcast_boot_id, (unsigned long)broadcast_sequence);
 }
 
 static void manager_handle_scanner_state(const ble_scanner_event_t *scanner_event, uint32_t wall_ms)
@@ -147,10 +158,12 @@ static void manager_process_report(const ble_scan_report_t *report, uint32_t wal
     switch (result) {
     case DEVICE_REGISTRY_ADDED:
         ESP_LOGI(TAG, "device added: %s", report->name);
+        manager_assign_broadcast_id(&registry.devices[index]);
         manager_publish_ui(&registry.devices[index]);
         manager_publish_lifecycle(DEVICE_LIFECYCLE_BROADCAST_STARTED, &registry.devices[index]);
         break;
     case DEVICE_REGISTRY_BROADCAST_STARTED:
+        manager_assign_broadcast_id(&registry.devices[index]);
         manager_publish_ui(&registry.devices[index]);
         manager_publish_lifecycle(DEVICE_LIFECYCLE_BROADCAST_STARTED, &registry.devices[index]);
         break;
@@ -215,6 +228,8 @@ void device_manager_init(void)
                                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     configASSERT(upload_event_queue != NULL);
     device_observation_clock_init(&observation_clock, manager_now_ms());
+    broadcast_boot_id = esp_random();
+    broadcast_sequence = 0;
     xTaskCreate(device_manager_task, "device_manager", 4096, NULL, 5, NULL);
 }
 

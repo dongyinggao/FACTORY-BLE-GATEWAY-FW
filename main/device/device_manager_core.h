@@ -14,6 +14,7 @@
 typedef struct {
     ble_scan_report_t report;
     bool broadcasting;
+    char broadcast_id[24];
     uint32_t broadcast_started_ms;
     uint32_t last_seen_ms;
     uint32_t end_detected_ms;

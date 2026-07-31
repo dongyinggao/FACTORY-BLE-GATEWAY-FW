@@ -12,13 +12,21 @@ int main(void)
     gateway_event_id_make(message.event_id, sizeof(message.event_id), 0x12AB, 7);
     assert(strcmp(message.event_id, "000012AB-7") == 0);
     strcpy(message.device.name, "SM_iCM2");
+    strcpy(message.device.broadcast_id, "BCAST-1");
     message.device.address[5] = 0xAA;
     message.type = GATEWAY_BROADCAST_STARTED;
     message.event_uptime_s = 17;
+    message.broadcast_duration_s = 19;
     assert(gateway_json_encode_broadcast(json, sizeof(json), &message, &config) > 0);
     assert(strstr(json, "\"message_type\":\"broadcast\"") != NULL);
     assert(strstr(json, "\"event\":\"BROADCAST_STARTED\"") != NULL);
     assert(strstr(json, "\"event_id\":\"000012AB-7\"") != NULL);
+    assert(strstr(json, "\"broadcast_id\":\"BCAST-1\"") != NULL);
+    assert(strstr(json, "\"device_mac\":\"AA:00:00:00:00:00\"") != NULL);
+    assert(strstr(json, "\"broadcast_duration_s\":null") != NULL);
+    message.type = GATEWAY_BROADCAST_ENDED;
+    assert(gateway_json_encode_broadcast(json, sizeof(json), &message, &config) > 0);
+    assert(strstr(json, "\"broadcast_duration_s\":19") != NULL);
     gateway_health_message_t health = {
         .event_id = "000012AB-8",
         .config = &config,

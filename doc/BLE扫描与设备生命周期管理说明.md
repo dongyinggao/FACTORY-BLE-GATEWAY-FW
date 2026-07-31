@@ -8,7 +8,7 @@ NimBLE 主机同步完成后，`main/ble/ble_scanner.c` 的 `scanner_on_sync()` 
 
 当前 ESP-IDF 5.5.5 的 Observer-only 配置不会可靠地对有限扫描时长触发 `BLE_GAP_EVENT_DISC_COMPLETE`，因此正式版本不再以该事件作为正常扫描循环机制。若持续扫描意外结束，`scanner_gap_event()` 会记录警告，并在扫描开关仍启用时尝试恢复扫描。
 
-控制器采用按地址重复过滤，缓存容量为 256、刷新周期为 1 秒。每次刷新后，持续广播的设备可以再次向 Host 上报，从而以约 1 秒的分辨率刷新 `last_seen_at`。
+控制器采用按地址重复过滤，缓存容量为 256、刷新周期为 1 秒。每次刷新后，持续广播的设备可以再次向 Host 上报，从而以约 1 秒的分辨率刷新最后观测时间；结束事件将该时间输出为 `broadcast_ended_at`。
 
 ## 2. 广播回调处理
 
@@ -38,7 +38,7 @@ NimBLE GAP 回调由同一个 Host 任务串行调用，不会出现多个 `scan
 - MAC 已存在且本轮仍在广播：更新 RSSI 和最后观测时间，不重复产生开始事件；
 - MAC 已存在但上一轮已结束：重新开启一轮并产生新的 `BROADCAST_STARTED`。
 
-设备表最多保存 128 个 MAC。`address_type` 只作为事件字段保存，不参与设备去重。
+设备表最多保存 128 个 MAC。`address_type` 仅用于 BLE 接收层，不参与去重，也不写入业务 CSV 或 MQTT；每轮广播另分配一个 `broadcast_id`，用于关联开始和结束事件。
 
 ## 5. 广播结束判定
 
