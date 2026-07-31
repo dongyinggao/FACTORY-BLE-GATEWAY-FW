@@ -25,6 +25,27 @@ static uint32_t sequence;
 static gateway_publisher_ack_t publish_ack;
 static uint32_t previous_discovery_report_count;
 static uint32_t previous_filter_match_count;
+static uint32_t volatile_publish_count;
+static uint32_t unrecoverable_upload_drop_count;
+
+static void publisher_report_unrecoverable_drop(void)
+{
+    ++unrecoverable_upload_drop_count;
+    if (unrecoverable_upload_drop_count == 1U ||
+        (unrecoverable_upload_drop_count % 10U) == 0U) {
+        ESP_LOGW(TAG, "SD and MQTT unavailable; broadcast uploads lost=%lu",
+                 (unsigned long)unrecoverable_upload_drop_count);
+    }
+}
+
+static void publisher_publish_volatile(const char *json)
+{
+    if (mqtt_service_publish(json) >= 0) {
+        ++volatile_publish_count;
+    } else {
+        publisher_report_unrecoverable_drop();
+    }
+}
 
 static void report_memory_health(void)
 {
@@ -90,6 +111,8 @@ static void enqueue_health(void)
         .ui_dropped = device_manager_ui_drop_count(),
         .capture_dropped = device_manager_capture_drop_count(),
         .upload_dropped = device_manager_upload_drop_count(),
+        .volatile_published = volatile_publish_count,
+        .unrecoverable_upload_dropped = unrecoverable_upload_drop_count,
     };
 
     previous_discovery_report_count = discovery_report_count;
@@ -112,7 +135,7 @@ static void enqueue_health(void)
                  (unsigned long)message.upload_dropped);
         if (!gateway_outbox_store_health(json) && mqtt_service_is_connected()) {
             ESP_LOGW(TAG, "SD unavailable; sending health without persistent outbox");
-            (void)mqtt_service_publish(json);
+            publisher_publish_volatile(json);
         }
     }
 }
@@ -145,20 +168,22 @@ static void publisher_task(void *arg)
                     ESP_LOGE(TAG,"broadcast persistence failed");
                     if (mqtt_service_is_connected()) {
                         ESP_LOGW(TAG, "sending broadcast without persistent outbox");
-                        (void)mqtt_service_publish(json);
+                        publisher_publish_volatile(json);
                     }
                 }
             } else if (mqtt_service_is_connected()) {
-                (void)mqtt_service_publish(json);
+                publisher_publish_volatile(json);
             }
-            else ESP_LOGW(TAG,"SD and MQTT unavailable; broadcast upload dropped");
+            else publisher_report_unrecoverable_drop();
         }
         while (mqtt_service_take_puback(&message_id)) {
             if (gateway_publisher_ack_accept(&publish_ack, message_id)) {
                 gateway_outbox_ack_current();
                 ESP_LOGD(TAG, "PUBACK received: message_id=%d", message_id);
-            } else {
+            } else if (publish_ack.awaiting) {
                 ESP_LOGW(TAG, "ignoring unmatched PUBACK: message_id=%d", message_id);
+            } else {
+                ESP_LOGD(TAG, "PUBACK for volatile publish: message_id=%d", message_id);
             }
         }
         uint32_t now=(uint32_t)(esp_timer_get_time()/1000000LL);
@@ -182,4 +207,14 @@ void gateway_publisher_start(void)
     gateway_outbox_init();
     xTaskCreate(publisher_task,"publisher",6144,NULL,4,NULL);
     ESP_LOGI(TAG,"publisher boot_id=%08lX",(unsigned long)boot_id);
+}
+
+uint32_t gateway_publisher_volatile_publish_count(void)
+{
+    return volatile_publish_count;
+}
+
+uint32_t gateway_publisher_unrecoverable_drop_count(void)
+{
+    return unrecoverable_upload_drop_count;
 }

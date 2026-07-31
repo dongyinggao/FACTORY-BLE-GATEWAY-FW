@@ -72,10 +72,15 @@ static void storage_manager_task(void *parameter)
         if (xSemaphoreTake(storage_mutex, portMAX_DELAY) != pdTRUE) {
             continue;
         }
-        if (!storage_state.ready && storage_state.mounted) {
+        if (!storage_state.ready && !storage_state.full && storage_state.mounted) {
             esp_err_t result = unmount_sd_preserving_shared_spi();
             storage_state.mounted = false;
-            ESP_LOGW(TAG, "SD unmounted after I/O failure: %s", esp_err_to_name(result));
+            if (result == ESP_OK) {
+                ESP_LOGW(TAG, "SD unmounted after reported I/O failure");
+            } else {
+                ESP_LOGW(TAG, "SD unmount after I/O failure also failed: %s",
+                         esp_err_to_name(result));
+            }
             device_manager_request_ui_status_refresh();
         }
         if (storage_state_core_retry_due(&storage_state, uptime_s())) {
@@ -104,7 +109,7 @@ bool storage_manager_lock(void)
     if (storage_mutex == NULL || xSemaphoreTake(storage_mutex, portMAX_DELAY) != pdTRUE) {
         return false;
     }
-    if (!storage_state.ready) {
+    if (!storage_state.mounted) {
         xSemaphoreGive(storage_mutex);
         return false;
     }
@@ -118,16 +123,34 @@ void storage_manager_unlock(void)
     }
 }
 
-void storage_manager_report_io_failure(void)
+void storage_manager_report_io_failure(int error_code)
 {
     storage_state_core_mark_failed(&storage_state, uptime_s(), STORAGE_RETRY_DELAY_S);
-    storage_last_error = ESP_FAIL;
+    storage_last_error = error_code == 0 ? ESP_FAIL : error_code;
     device_manager_request_ui_status_refresh();
+}
+
+void storage_manager_report_full(int error_code)
+{
+    storage_state_core_mark_full(&storage_state);
+    storage_last_error = error_code == 0 ? ENOSPC : error_code;
+    device_manager_request_ui_status_refresh();
+}
+
+void storage_manager_report_write_success(void)
+{
+    storage_state_core_mark_write_success(&storage_state);
+    storage_last_error = ESP_OK;
 }
 
 bool storage_manager_is_ready(void)
 {
     return storage_state.ready;
+}
+
+bool storage_manager_is_full(void)
+{
+    return storage_state.full;
 }
 
 uint32_t storage_manager_generation(void)
@@ -137,7 +160,7 @@ uint32_t storage_manager_generation(void)
 
 const char *storage_manager_status_text(void)
 {
-    return storage_state.ready ? "OK" : "Retry";
+    return storage_state.ready ? "OK" : (storage_state.full ? "Full" : "Retry");
 }
 
 esp_err_t storage_manager_last_error(void)

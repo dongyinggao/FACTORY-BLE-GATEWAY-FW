@@ -109,8 +109,9 @@ ESP-IDF 项目可将该组件直接加入依赖，并自行实现业务状态页
 高水位接近队列容量但 `Dropped events=0` 时，说明出现过短暂积压但尚未丢失事件；应结合
 `Dropped events`、Outbox 状态和 MQTT/SD 日志判断是否需要优化消费者处理能力。
 
-`sys status` 的 Outbox 行反映当前可用性：`No SD` 表示当前不能持久化、`Full` 表示达到容量上限、
-`Ready` 表示当前可读写。`historical_failures` 是本次启动以来的失败累计数；即使 SD/MQTT 已恢复、
+`sys status` 的 Outbox 行反映当前可用性：`No SD` 表示当前不能持久化、`Full` 表示 SD 文件系统或
+Outbox 容量已满、`Ready` 表示当前可读写。SD 满时保持已挂载状态，不会反复重挂载；只有卡移除、
+超时等 I/O 故障才进入 `Retry`。`historical_failures` 是本次启动以来的失败累计数；即使 SD/MQTT 已恢复、
 Outbox 已清空，该数也会保留，不能单独用于判断当前异常。
 
 ### 128 台设备硬件链路压力测试
@@ -140,6 +141,8 @@ sys status         # 队列深度、高水位与丢弃计数
 - `scan_reports_30s`、`filter_matched_30s`：过去 30 秒 NimBLE 已交付的扫描报告数和名称过滤命中数；
 - `scan_timing_30s`：最近窗口内扫描回调平均/最大耗时，以及有效目标报告在扫描队列中的平均/最大等待时间；
 - `dropped_events`：对应链路的累计丢弃数；应保持为零。
+- `delivery`：`volatile_published` 表示 SD 不可写但 MQTT 已连接、仅实时发送的记录数；
+  `unrecoverable_dropped` 表示 SD 不可写且 MQTT 不可用时无法恢复的广播事件数，应保持为零。
 
 串口每 30 秒同步输出一条简短的 `publisher: health` 摘要。LCD 的设备行显示
 `SD:OK/Retry` 与 `E:<错误码>`；`E:0` 表示当前 SD 状态正常。

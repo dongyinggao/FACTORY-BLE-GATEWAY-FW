@@ -22,6 +22,7 @@ static device_observation_clock_t observation_clock;
 static uint32_t capture_drop_count;
 static uint32_t upload_drop_count;
 static uint32_t ui_drop_count;
+static uint32_t table_reject_count;
 static uint32_t ui_queue_high_watermark;
 static uint32_t capture_queue_high_watermark;
 static uint32_t upload_queue_high_watermark;
@@ -169,7 +170,11 @@ static void manager_process_report(const ble_scan_report_t *report, uint32_t wal
         manager_publish_lifecycle(DEVICE_LIFECYCLE_BROADCAST_STARTED, &registry.devices[index]);
         break;
     case DEVICE_REGISTRY_FULL:
-        ESP_LOGW(TAG, "device table full; report dropped");
+        ++table_reject_count;
+        if (table_reject_count == 1U || (table_reject_count % 10U) == 0U) {
+            ESP_LOGW(TAG, "device table full; valid reports rejected=%lu",
+                     (unsigned long)table_reject_count);
+        }
         break;
     default:
         break;
@@ -271,6 +276,11 @@ uint32_t device_manager_capture_drop_count(void)
 uint32_t device_manager_upload_drop_count(void)
 {
     return upload_drop_count;
+}
+
+uint32_t device_manager_table_reject_count(void)
+{
+    return table_reject_count;
 }
 
 uint32_t device_manager_ui_drop_count(void)

@@ -27,6 +27,13 @@ int main(void)
 
     storage_state_core_mount_result(&state, true, 20, 5);
     assert(state.ready && state.generation == 2);
+
+    storage_state_core_mark_full(&state);
+    assert(!state.ready && state.mounted && state.full);
+    assert(!storage_state_core_retry_due(&state, 100));
+
+    storage_state_core_mark_write_success(&state);
+    assert(state.ready && state.mounted && !state.full);
     puts("storage state tests passed");
     return 0;
 }

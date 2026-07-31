@@ -9,6 +9,7 @@
 #include "ble_scanner.h"
 #include "device_manager.h"
 #include "gateway_config.h"
+#include "gateway_publisher.h"
 #include "mqtt_service.h"
 #include "network_manager.h"
 #include "outbox.h"
@@ -54,9 +55,10 @@ static void print_status(void)
     snprintf(value, sizeof(value), "%s (%s)", scanner_state_text(ble_scanner_get_state()),
              ble_scanner_is_enabled() ? "enabled" : "disabled");
     print_status_row("BLE scanner", value);
-    snprintf(value, sizeof(value), "%u registered / %u broadcasting",
+    snprintf(value, sizeof(value), "%u registered / %u broadcasting / %lu rejected",
              (unsigned int)device_manager_registered_count(),
-             (unsigned int)device_manager_broadcasting_count());
+             (unsigned int)device_manager_broadcasting_count(),
+             (unsigned long)device_manager_table_reject_count());
     print_status_row("Devices", value);
     snprintf(value, sizeof(value), "scan=%u, ui=%u, capture=%u, upload=%u",
              (unsigned int)ble_scanner_event_queue_depth(),
@@ -64,11 +66,13 @@ static void print_status(void)
              (unsigned int)device_manager_capture_queue_depth(),
              (unsigned int)device_manager_upload_queue_depth());
     print_status_row("Queue depth", value);
-    snprintf(value, sizeof(value), "scan=%lu[%u], ui=%lu[%u], capture=%lu[%u], upload=%lu[%u]",
+    snprintf(value, sizeof(value), "scan=%lu[%u], ui=%lu[%u]",
              (unsigned long)ble_scanner_event_queue_high_watermark(),
              (unsigned int)BLE_EVENT_QUEUE_MAX_LEN,
              (unsigned long)device_manager_ui_queue_high_watermark(),
-             (unsigned int)DEVICE_MANAGER_UI_QUEUE_LEN,
+             (unsigned int)DEVICE_MANAGER_UI_QUEUE_LEN);
+    print_status_row("Queue high water", value);
+    snprintf(value, sizeof(value), "capture=%lu[%u], upload=%lu[%u]",
              (unsigned long)device_manager_capture_queue_high_watermark(),
              (unsigned int)DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN,
              (unsigned long)device_manager_upload_queue_high_watermark(),
@@ -88,6 +92,10 @@ static void print_status(void)
              (unsigned long)device_manager_capture_drop_count(),
              (unsigned long)device_manager_upload_drop_count());
     print_status_row("Dropped events", value);
+    snprintf(value, sizeof(value), "volatile=%lu, unrecoverable=%lu",
+             (unsigned long)gateway_publisher_volatile_publish_count(),
+             (unsigned long)gateway_publisher_unrecoverable_drop_count());
+    print_status_row("Delivery loss", value);
     snprintf(value, sizeof(value), "%s (generation %lu, error=%ld)",
              storage_manager_status_text(),
              (unsigned long)storage_manager_generation(),
