@@ -47,6 +47,15 @@ static void publisher_publish_volatile(const char *json)
     }
 }
 
+/* Health is low-priority telemetry. When MQTT is already connected it does
+ * not need an SD round trip; broadcast lifecycle records remain durable. */
+static void publisher_publish_health_direct(const char *json)
+{
+    if (mqtt_service_publish(json) < 0) {
+        ESP_LOGW(TAG, "health publish failed; next disconnected interval will persist the latest sample");
+    }
+}
+
 static void report_memory_health(void)
 {
     size_t dma_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
@@ -133,9 +142,10 @@ static void enqueue_health(void)
                  (unsigned long)message.ui_dropped,
                  (unsigned long)message.capture_dropped,
                  (unsigned long)message.upload_dropped);
-        if (!gateway_outbox_store_health(json) && mqtt_service_is_connected()) {
-            ESP_LOGW(TAG, "SD unavailable; sending health without persistent outbox");
-            publisher_publish_volatile(json);
+        if (mqtt_service_is_connected()) {
+            publisher_publish_health_direct(json);
+        } else if (!gateway_outbox_store_health(json)) {
+            ESP_LOGW(TAG, "MQTT disconnected; unable to persist latest health sample");
         }
     }
 }

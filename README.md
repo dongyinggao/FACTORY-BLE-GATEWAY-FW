@@ -155,7 +155,9 @@ sys status         # 队列深度、高水位与丢弃计数
 
 ### 现场运行证据
 
-每 30 秒发布一条 `gateway_health` MQTT 消息。除网络、SNTP、SD 和 Outbox 状态外，消息还包含：
+每 30 秒发布一条 `gateway_health` MQTT 消息。MQTT 已连接时它直接以 QoS 1 发送、不写入
+SD；仅在 MQTT 断开时，SD Outbox 覆盖式保存最新一条心跳，待重连后发送。除网络、SNTP、SD
+和 Outbox 状态外，消息还包含：
 
 - `registered_devices`、`broadcasting_devices`：当前设备表与广播轮次数；
 - `scan_reports_30s`、`filter_matched_30s`：过去 30 秒 NimBLE 已交付的扫描报告数和名称过滤命中数；
