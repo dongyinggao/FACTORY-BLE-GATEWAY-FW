@@ -50,6 +50,8 @@ void gateway_config_init(void)
         load_string(handle, "ntp_srv", active_config.ntp_server, sizeof(active_config.ntp_server));
         load_string(handle, "timezone", active_config.timezone, sizeof(active_config.timezone));
         load_string(handle, "name_rules", active_config.name_rules, sizeof(active_config.name_rules));
+        load_string(handle, "ota_manifest", active_config.ota_manifest_uri,
+                    sizeof(active_config.ota_manifest_uri));
         if (nvs_get_u32(handle, "bcast_end_s", &seconds) == ESP_OK && seconds >= 5 && seconds <= 300)
             active_config.broadcast_end_ms = seconds * 1000U;
         nvs_get_u8(handle, "mqtt_qos", &active_config.mqtt_qos);
@@ -71,6 +73,11 @@ bool gateway_config_mqtt_is_valid(const gateway_config_t *config)
     return config != NULL && config->mqtt_qos == 1 &&
            (!strncmp(config->mqtt_uri, "mqtt://", 7) || !strncmp(config->mqtt_uri, "mqtts://", 8));
 }
+bool gateway_config_ota_is_valid(const gateway_config_t *config)
+{
+    return config != NULL && !strncmp(config->ota_manifest_uri, "https://", 8) &&
+           config->ota_manifest_uri[8] != '\0';
+}
 uint32_t gateway_config_get_revision(void) { return config_revision; }
 
 static void cfg_print(void)
@@ -87,6 +94,8 @@ static void cfg_print(void)
     printf("ntp_server=%s\n", pending_config.ntp_server);
     printf("timezone=%s\n", pending_config.timezone);
     printf("name_rules=%s\n", pending_config.name_rules[0] ? pending_config.name_rules : "<default>");
+    printf("ota_manifest_uri=%s\n", pending_config.ota_manifest_uri[0] ?
+           pending_config.ota_manifest_uri : "<unset>");
     printf("config_ver=%lu\n", (unsigned long)pending_config.config_ver);
 }
 
@@ -99,6 +108,9 @@ static int cfg_commit(void)
     }
     if (pending_config.name_rules[0] && !device_filter_set_rules(pending_config.name_rules)) {
         printf("name_rules must be comma-separated prefixes ending in *, e.g. SM_ICM*,SM_ICD*\n"); return 1;
+    }
+    if (pending_config.ota_manifest_uri[0] && !gateway_config_ota_is_valid(&pending_config)) {
+        printf("ota_manifest_uri must use https://\n"); return 1;
     }
     result = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
 #define CFG_SET(call) do { if (result == ESP_OK) result = (call); } while (0)
@@ -114,6 +126,7 @@ static int cfg_commit(void)
     CFG_SET(nvs_set_str(handle, "ntp_srv", pending_config.ntp_server));
     CFG_SET(nvs_set_str(handle, "timezone", pending_config.timezone));
     CFG_SET(nvs_set_str(handle, "name_rules", pending_config.name_rules));
+    CFG_SET(nvs_set_str(handle, "ota_manifest", pending_config.ota_manifest_uri));
     pending_config.config_ver = active_config.config_ver + 1;
     CFG_SET(nvs_set_u32(handle, "config_ver", pending_config.config_ver));
     CFG_SET(nvs_commit(handle));
@@ -149,6 +162,7 @@ static int cfg_command(int argc, char **argv)
     if (!strcmp(argv[2], "ntp_server")) return cfg_set_string(pending_config.ntp_server, sizeof(pending_config.ntp_server), argv[3]);
     if (!strcmp(argv[2], "timezone")) return cfg_set_string(pending_config.timezone, sizeof(pending_config.timezone), argv[3]);
     if (!strcmp(argv[2], "name_rules")) return cfg_set_string(pending_config.name_rules, sizeof(pending_config.name_rules), argv[3]);
+    if (!strcmp(argv[2], "ota_manifest_uri")) return cfg_set_string(pending_config.ota_manifest_uri, sizeof(pending_config.ota_manifest_uri), argv[3]);
     value = strtoul(argv[3], &end, 10);
     if (*end) goto usage;
     if (!strcmp(argv[2], "bcast_end_s") && value >= 5 && value <= 300) { pending_config.broadcast_end_ms = value * 1000U; return 0; }

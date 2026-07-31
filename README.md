@@ -13,6 +13,7 @@
 - Wi-Fi STA、SNTP 校时、MQTT QoS 1 上报与 PUBACK 确认；
 - CoreS3-SE LCD 状态显示和触摸启停扫描；
 - USB Serial/JTAG `esp_console` 配置并保存到 NVS。
+- 受控 HTTPS OTA：Manifest 检查、SHA-256 校验、双分区切换与启动自检回滚。
 
 ## 开发环境
 
@@ -61,6 +62,8 @@ cfg set wifi_password <password>
 cfg set mqtt_uri mqtt://192.168.20.223:1883
 cfg set mqtt_qos 1
 cfg set ntp_server ntp.aliyun.com
+# 仅接受 HTTPS 地址；示例域名请替换为实际发布服务器
+cfg set ota_manifest_uri https://ota.example.com/ble-gateway/manifest.json
 cfg commit
 cfg show
 ```
@@ -71,6 +74,23 @@ cfg show
 ```text
 factory/product-status/gateway/<gateway_id>/events
 ```
+
+## HTTPS OTA 维护
+
+OTA 仅由串口命令显式触发，不会通过 MQTT 自动升级。升级前必须满足 Wi-Fi 已连接、SNTP
+已同步、SD 卡可写且没有正在进行的设备广播；网关会先停止扫描并等待现有采集/上传队列排空。
+
+```text
+ota check   # 下载并校验 Manifest，不写入固件
+ota status  # 查看当前状态、可用版本和错误码
+ota start   # 重新检查 Manifest，满足采集保护条件后下载并重启
+```
+
+Manifest 必须通过 HTTPS 提供，并包含 `version`、`image_url`、`image_size` 与镜像
+`sha256`，以及硬件型号、芯片目标、分区布局和递增发布序号。镜像下载到非运行 OTA 分区，
+校验失败不会切换启动分区；首次启动新镜像后，扫描和 SD 存储服务连续运行 10 秒才确认新
+镜像有效，否则由 Bootloader 自动回滚。详细的发布格式、测试步骤与限制见
+[OTA 升级与发布操作说明](doc/OTA升级与发布操作说明.md)。
 
 ## 运行诊断命令
 
@@ -210,5 +230,6 @@ sdkconfig.defaults     配置默认值
 
 ## 当前限制
 
-OTA、MQTT TLS 证书校验、云端下行控制和多网关协同尚未纳入当前固件交付范围。
-现场交付前仍需完成 128 台设备并发广播、断网 Outbox 重传和长时间运行验证。
+MQTT TLS 证书校验、云端下行控制、OTA Manifest 签名/灰度平台和多网关协同尚未纳入当前
+固件交付范围。现场交付前仍需完成 128 台设备并发广播、断网 Outbox 重传、OTA 中断回滚和
+长时间运行验证。

@@ -19,11 +19,21 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v1/16m.csv"
 # end of Partition Table
 
 #
+# Application Rollback
+#
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+# end of Application Rollback
+
+#
 # System diagnostics
 #
 CONFIG_SYSTEM_DIAGNOSTICS_TASKS_ENABLED=y
 CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 # end of System diagnostics
+
+# Disable managed LVGL sample/demo sources; the gateway UI only uses the BSP UI API.
+CONFIG_LV_BUILD_EXAMPLES=n
+CONFIG_LV_BUILD_DEMOS=n
 
 #
 # Component config

@@ -21,5 +21,7 @@ idf_component_register(SRCS
                        "network/mqtt_service.c"
                        "network/network_manager.c"
                        "network/time_service.c"
-                       PRIV_REQUIRES bt nvs_flash m5stack_core_s3 esp_wifi esp_netif esp_event console mqtt esp_timer system_diagnostics
+                       "network/ota_manifest_core.c"
+                       "network/ota_manager.c"
+                       PRIV_REQUIRES bt nvs_flash m5stack_core_s3 lvgl__lvgl esp_wifi esp_netif esp_event console mqtt esp_timer system_diagnostics esp_http_client app_update mbedtls
                        INCLUDE_DIRS "app" "ble" "device" "storage" "config" "network")

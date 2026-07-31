@@ -12,6 +12,7 @@
 #include "gateway_publisher.h"
 #include "mqtt_service.h"
 #include "network_manager.h"
+#include "ota_manager.h"
 #include "outbox.h"
 #include "storage_manager.h"
 #include "system_diagnostics.h"
@@ -109,6 +110,14 @@ static void print_status(void)
              (unsigned long)gateway_outbox_pending_bytes(),
              (unsigned long)gateway_outbox_failure_count());
     print_status_row("Outbox", value);
+    snprintf(value, sizeof(value), "%s, available=%s, release=%lu/%lu/%lu, %lu/%lu B, error=%d",
+             ota_manager_status_text(), ota_manager_available_version(),
+             (unsigned long)ota_manager_confirmed_release_sequence(),
+             (unsigned long)ota_manager_pending_release_sequence(),
+             (unsigned long)ota_manager_available_release_sequence(),
+             (unsigned long)ota_manager_downloaded_bytes(),
+             (unsigned long)ota_manager_image_size(), ota_manager_last_error());
+    print_status_row("OTA", value);
     printf("+--------------------+--------------------------------------------------------+\n");
 }
 
