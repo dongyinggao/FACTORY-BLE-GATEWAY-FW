@@ -124,26 +124,49 @@ static void update_recent_device(const device_manager_ui_event_t *event)
     recent_devices[selected].sequence = ++device_sequence;
 }
 
-static char service_status_mark(const char *status)
+static const char *service_status_text(const char *status)
 {
     if (strcmp(status, "Connected") == 0) {
-        return '+';
+        return "OK";
     }
     if (strcmp(status, "Disabled") == 0) {
-        return '-';
+        return "Off";
     }
     if (strcmp(status, "Error") == 0) {
-        return '!';
+        return "Err";
     }
-    return '~';
+    return "Wait";
+}
+
+static const char *ota_status_text(void)
+{
+    switch (ota_manager_get_state()) {
+    case OTA_MANAGER_STATE_CHECKING:
+        return "Check";
+    case OTA_MANAGER_STATE_READY:
+        return "Ready";
+    case OTA_MANAGER_STATE_PREPARING:
+        return "Prep";
+    case OTA_MANAGER_STATE_DOWNLOADING:
+        return "DL";
+    case OTA_MANAGER_STATE_VERIFYING:
+        return "Verify";
+    case OTA_MANAGER_STATE_REBOOTING:
+        return "Boot";
+    case OTA_MANAGER_STATE_ERROR:
+        return "Err";
+    case OTA_MANAGER_STATE_IDLE:
+    default:
+        return "Idle";
+    }
 }
 
 static void update_network_status(void)
 {
-    lv_label_set_text_fmt(network_status_label, "W:%c M:%c OB:%lu OTA:%s",
-                          service_status_mark(network_manager_status_text()),
-                          service_status_mark(mqtt_service_status_text()),
-                          (unsigned long)gateway_outbox_pending_count(), ota_manager_status_text());
+    lv_label_set_text_fmt(network_status_label, "WiFi:%s MQTT:%s Outbox:%lu OTA:%s",
+                          service_status_text(network_manager_status_text()),
+                          service_status_text(mqtt_service_status_text()),
+                          (unsigned long)gateway_outbox_pending_count(), ota_status_text());
 }
 
 static void scanner_toggle_cb(lv_event_t *event)
@@ -260,7 +283,9 @@ void app_ui_start(void)
     lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 55);
 
     network_status_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(network_status_label, "W:~ M:~ OB:0 OTA:Idle");
+    lv_obj_set_width(network_status_label, 316);
+    lv_label_set_long_mode(network_status_label, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(network_status_label, "WiFi:Wait MQTT:Wait Outbox:0 OTA:Idle");
     lv_obj_align(network_status_label, LV_ALIGN_TOP_MID, 0, 73);
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {

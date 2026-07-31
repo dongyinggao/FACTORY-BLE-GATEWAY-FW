@@ -169,6 +169,10 @@ SD；仅在 MQTT 断开时，SD Outbox 覆盖式保存最新一条心跳，待�
 串口每 30 秒同步输出一条简短的 `publisher: health` 摘要。LCD 的设备行显示
 `SD:OK/Retry` 与 `E:<错误码>`；`E:0` 表示当前 SD 状态正常。
 
+LCD 网络行使用 `WiFi:<状态> MQTT:<状态> Outbox:<数量> OTA:<状态>` 格式。其中 `OK` 为已连接、
+`Wait` 为正在连接或等待、`Off` 为未配置、`Err` 为错误；`Outbox` 是当前待 MQTT 确认的持久化
+消息数量。OTA 仅在用户执行命令时短暂显示 `Check`、`Prep`、`DL`、`Verify` 或 `Boot`，通常为 `Idle`。
+
 例如：
 
 ```text
