@@ -107,6 +107,18 @@ sys status         # 队列深度、高水位与丢弃计数
 目标设备先广播，否则命令会根据剩余容量拒绝测试，避免把第 129 台的失败误判为性能问题。
 该命令的低优先级任务不会暂停或替代真实 BLE 扫描。
 
+### 现场运行证据
+
+每 30 秒发布一条 `gateway_health` MQTT 消息。除网络、SNTP、SD 和 Outbox 状态外，消息还包含：
+
+- `registered_devices`、`broadcasting_devices`：当前设备表与广播轮次数；
+- `scan_reports_30s`、`filter_matched_30s`：过去 30 秒 NimBLE 已交付的扫描报告数和名称过滤命中数；
+- `queue_high_water`：本次启动以来扫描、UI、CSV、上传队列的峰值；
+- `dropped_events`：对应链路的累计丢弃数；应保持为零。
+
+串口每 30 秒同步输出一条简短的 `publisher: health` 摘要。LCD 的设备行显示
+`SD:OK/Retry` 与 `E:<错误码>`；`E:0` 表示当前 SD 状态正常。
+
 ## 主机单元测试
 
 无需硬件即可运行纯逻辑测试：

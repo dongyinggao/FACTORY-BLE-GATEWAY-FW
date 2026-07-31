@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 
 #include "csv_logger.h"
+#include "ble_scanner.h"
 #include "device_manager.h"
 #include "event_json.h"
 #include "gateway_config.h"
@@ -15,12 +16,15 @@
 #include "network_manager.h"
 #include "outbox.h"
 #include "publisher_ack.h"
+#include "storage_manager.h"
 #include "time_service.h"
 
 static const char *TAG="publisher";
 static uint32_t boot_id;
 static uint32_t sequence;
 static gateway_publisher_ack_t publish_ack;
+static uint32_t previous_discovery_report_count;
+static uint32_t previous_filter_match_count;
 
 static void report_memory_health(void)
 {
@@ -54,15 +58,48 @@ static void make_broadcast(const device_lifecycle_event_t *event, char json[GATE
 static void enqueue_health(void)
 {
     char json[GATEWAY_JSON_MAX_LEN], id[GATEWAY_EVENT_ID_MAX_LEN];
+    uint32_t discovery_report_count = ble_scanner_discovery_report_count();
+    uint32_t filter_match_count = ble_scanner_filter_match_count();
+    gateway_health_message_t message = {
+        .event_id = id,
+        .config = gateway_config_get(),
+        .uptime_s = (uint32_t)(esp_timer_get_time() / 1000000LL),
+        .wifi = network_manager_status_text(),
+        .mqtt = mqtt_service_status_text(),
+        .sntp = time_service_status_text(),
+        .sd_ready = csv_logger_is_ready(),
+        .sd_status = storage_manager_status_text(),
+        .sd_error = storage_manager_last_error(),
+        .outbox_messages = gateway_outbox_pending_count(),
+        .outbox_bytes = gateway_outbox_pending_bytes(),
+        .outbox_failures = gateway_outbox_failure_count(),
+        .registered_devices = device_manager_registered_count(),
+        .broadcasting_devices = device_manager_broadcasting_count(),
+        .scan_reports_30s = discovery_report_count - previous_discovery_report_count,
+        .filter_matched_30s = filter_match_count - previous_filter_match_count,
+        .scan_queue_high_water = ble_scanner_event_queue_high_watermark(),
+        .ui_queue_high_water = device_manager_ui_queue_high_watermark(),
+        .capture_queue_high_water = device_manager_capture_queue_high_watermark(),
+        .upload_queue_high_water = device_manager_upload_queue_high_watermark(),
+        .scan_dropped = ble_scanner_report_drop_count(),
+        .ui_dropped = device_manager_ui_drop_count(),
+        .capture_dropped = device_manager_capture_drop_count(),
+        .upload_dropped = device_manager_upload_drop_count(),
+    };
+
+    previous_discovery_report_count = discovery_report_count;
+    previous_filter_match_count = filter_match_count;
     gateway_event_id_make(id,sizeof(id),boot_id,++sequence);
-    if (gateway_json_encode_health(json, sizeof(json), id, gateway_config_get(),
-                                   (uint32_t)(esp_timer_get_time() / 1000000LL),
-                                   network_manager_status_text(), mqtt_service_status_text(),
-                                   time_service_status_text(), csv_logger_is_ready(),
-                                   gateway_outbox_pending_count(), gateway_outbox_pending_bytes(),
-                                   gateway_outbox_failure_count(),
-                                   device_manager_capture_drop_count(),
-                                   device_manager_upload_drop_count()) >= 0) {
+    if (gateway_json_encode_health(json, sizeof(json), &message) >= 0) {
+        ESP_LOGI(TAG, "health: scan_30s=%lu matched_30s=%lu devices=%u/%u drops=%lu/%lu/%lu/%lu",
+                 (unsigned long)message.scan_reports_30s,
+                 (unsigned long)message.filter_matched_30s,
+                 (unsigned int)message.registered_devices,
+                 (unsigned int)message.broadcasting_devices,
+                 (unsigned long)message.scan_dropped,
+                 (unsigned long)message.ui_dropped,
+                 (unsigned long)message.capture_dropped,
+                 (unsigned long)message.upload_dropped);
         if (!gateway_outbox_store_health(json) && mqtt_service_is_connected()) {
             ESP_LOGW(TAG, "SD unavailable; sending health without persistent outbox");
             (void)mqtt_service_publish(json);

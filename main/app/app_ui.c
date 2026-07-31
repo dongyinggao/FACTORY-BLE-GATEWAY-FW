@@ -15,6 +15,7 @@
 #include "mqtt_service.h"
 #include "network_manager.h"
 #include "outbox.h"
+#include "storage_manager.h"
 #include "time_service.h"
 
 #define DEVICE_LIST_VISIBLE_ROWS 4
@@ -73,10 +74,11 @@ static const char *scanner_button_text(ble_scanner_state_t state)
 static void update_device_list(void)
 {
     lv_label_set_text_fmt(device_count_label,
-                          "Devices: %u  Broadcasting: %u  SD: %s",
+                          "Dev:%u Bcast:%u SD:%s E:%ld",
                           (unsigned int)device_count,
                           (unsigned int)broadcasting_count,
-                          csv_logger_is_ready() ? "OK" : "ERR");
+                          storage_manager_status_text(),
+                          (long)storage_manager_last_error());
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {
         const ui_recent_device_t *device = &recent_devices[row];
@@ -239,7 +241,7 @@ void app_ui_start(void)
     lv_obj_align(scanner_status_label, LV_ALIGN_TOP_MID, 0, 35);
 
     device_count_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(device_count_label, "Devices: 0  Broadcasting: 0  SD: Initializing");
+    lv_label_set_text(device_count_label, "Dev:0 Bcast:0 SD:Retry E:-1");
     lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 55);
 
     network_status_label = lv_label_create(lv_scr_act());

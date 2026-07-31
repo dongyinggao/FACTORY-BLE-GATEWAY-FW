@@ -19,13 +19,38 @@ int main(void)
     assert(strstr(json, "\"message_type\":\"broadcast\"") != NULL);
     assert(strstr(json, "\"event\":\"BROADCAST_STARTED\"") != NULL);
     assert(strstr(json, "\"event_id\":\"000012AB-7\"") != NULL);
-    assert(gateway_json_encode_health(json, sizeof(json), "000012AB-8", &config, 30,
-                                      "Connected", "Connected", "Synced", true, 2, 512, 3,
-                                      0, 1) > 0);
+    gateway_health_message_t health = {
+        .event_id = "000012AB-8",
+        .config = &config,
+        .uptime_s = 30,
+        .wifi = "Connected",
+        .mqtt = "Connected",
+        .sntp = "Synced",
+        .sd_ready = true,
+        .sd_status = "OK",
+        .outbox_messages = 2,
+        .outbox_bytes = 512,
+        .outbox_failures = 3,
+        .registered_devices = 4,
+        .broadcasting_devices = 2,
+        .scan_reports_30s = 99,
+        .filter_matched_30s = 12,
+        .scan_queue_high_water = 2,
+        .ui_queue_high_water = 3,
+        .capture_queue_high_water = 4,
+        .upload_queue_high_water = 5,
+        .scan_dropped = 1,
+        .ui_dropped = 2,
+        .capture_dropped = 0,
+        .upload_dropped = 1,
+    };
+    assert(gateway_json_encode_health(json, sizeof(json), &health) > 0);
     assert(strstr(json, "\"outbox_bytes\":512") != NULL);
     assert(strstr(json, "\"outbox_failures\":3") != NULL);
-    assert(strstr(json, "\"capture_dropped\":0") != NULL);
-    assert(strstr(json, "\"upload_dropped\":1") != NULL);
+    assert(strstr(json, "\"registered_devices\":4") != NULL);
+    assert(strstr(json, "\"filter_matched_30s\":12") != NULL);
+    assert(strstr(json, "\"queue_high_water\":{\"scan\":2,\"ui\":3,\"capture\":4,\"upload\":5}") != NULL);
+    assert(strstr(json, "\"dropped_events\":{\"scan\":1,\"ui\":2,\"capture\":0,\"upload\":1}") != NULL);
     puts("event_json tests passed");
     return 0;
 }
