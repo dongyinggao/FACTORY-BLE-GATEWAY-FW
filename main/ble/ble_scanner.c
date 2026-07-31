@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "freertos/idf_additions.h"
 #include "host/ble_gap.h"
@@ -24,6 +25,19 @@ static uint32_t scanner_report_drop_count;
 static uint32_t scanner_queue_high_watermark;
 static uint32_t scanner_discovery_report_count;
 static uint32_t scanner_filter_match_count;
+static portMUX_TYPE scanner_timing_lock = portMUX_INITIALIZER_UNLOCKED;
+static ble_scan_timing_core_t scanner_timing_current;
+static ble_scan_timing_window_t scanner_timing_last;
+
+static void scanner_record_callback_duration(int64_t started_at_us)
+{
+    int64_t elapsed_us = esp_timer_get_time() - started_at_us;
+
+    portENTER_CRITICAL(&scanner_timing_lock);
+    ble_scan_timing_core_record_callback(&scanner_timing_current,
+                                         elapsed_us > UINT32_MAX ? UINT32_MAX : (uint32_t)elapsed_us);
+    portEXIT_CRITICAL(&scanner_timing_lock);
+}
 
 static void scanner_track_queue_high_watermark(void)
 {
@@ -53,6 +67,7 @@ static bool scanner_enqueue_report(const ble_scan_report_t *report)
     ble_scanner_event_t scanner_event = {
         .type = BLE_SCANNER_EVENT_REPORT,
         .state = BLE_SCANNER_STATE_SCANNING,
+        .enqueued_at_us = esp_timer_get_time(),
         .report = *report,
     };
 
@@ -86,16 +101,20 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
     (void)arg;
 
     switch (event->type) {
-    case BLE_GAP_EVENT_DISC:
+    case BLE_GAP_EVENT_DISC: {
+        int64_t started_at_us = esp_timer_get_time();
+
         ++scanner_discovery_report_count;
         rc = ble_hs_adv_parse_fields(&fields, event->disc.data, event->disc.length_data);
         if (rc != 0 || fields.name == NULL || fields.name_len == 0) {
+            scanner_record_callback_duration(started_at_us);
             return 0;
         }
 
         ble_scan_report_t report = {0};
         device_filter_copy_name(report.name, fields.name, fields.name_len);
         if (!device_filter_name_matches(report.name)) {
+            scanner_record_callback_duration(started_at_us);
             return 0;
         }
         ++scanner_filter_match_count;
@@ -104,7 +123,9 @@ static int scanner_gap_event(struct ble_gap_event *event, void *arg)
         report.address_type = event->disc.addr.type;
         report.rssi = event->disc.rssi;
         (void)scanner_enqueue_report(&report);
+        scanner_record_callback_duration(started_at_us);
         return 0;
+    }
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
         scan_in_progress = false;
@@ -189,6 +210,8 @@ void ble_scanner_init(void)
                                                 sizeof(ble_scanner_event_t),
                                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     configASSERT(scanner_event_queue != NULL);
+    ble_scan_timing_core_init(&scanner_timing_current);
+    scanner_timing_last = (ble_scan_timing_window_t){0};
     scanner_enabled = true;
 
     rc = nimble_port_init();
@@ -297,6 +320,34 @@ uint32_t ble_scanner_discovery_report_count(void)
 uint32_t ble_scanner_filter_match_count(void)
 {
     return scanner_filter_match_count;
+}
+
+ble_scan_timing_window_t ble_scanner_take_timing_window(void)
+{
+    ble_scan_timing_window_t window;
+
+    portENTER_CRITICAL(&scanner_timing_lock);
+    ble_scan_timing_core_take_window(&scanner_timing_current, &window);
+    scanner_timing_last = window;
+    portEXIT_CRITICAL(&scanner_timing_lock);
+    return window;
+}
+
+ble_scan_timing_window_t ble_scanner_last_timing_window(void)
+{
+    ble_scan_timing_window_t window;
+
+    portENTER_CRITICAL(&scanner_timing_lock);
+    window = scanner_timing_last;
+    portEXIT_CRITICAL(&scanner_timing_lock);
+    return window;
+}
+
+void ble_scanner_record_report_queue_wait_us(uint32_t wait_us)
+{
+    portENTER_CRITICAL(&scanner_timing_lock);
+    ble_scan_timing_core_record_queue_wait(&scanner_timing_current, wait_us);
+    portEXIT_CRITICAL(&scanner_timing_lock);
 }
 
 bool ble_scanner_submit_diagnostic_report(const ble_scan_report_t *report)

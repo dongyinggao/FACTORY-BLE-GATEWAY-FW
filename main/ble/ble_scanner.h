@@ -7,6 +7,7 @@
 #include "freertos/queue.h"
 
 #include "ble_types.h"
+#include "scan_timing_core.h"
 
 #define BLE_EVENT_QUEUE_MAX_LEN 192
 
@@ -26,6 +27,7 @@ typedef struct {
     ble_scanner_event_type_t type;
     ble_scanner_state_t state;
     int error_code;
+    int64_t enqueued_at_us;
     ble_scan_report_t report;
 } ble_scanner_event_t;
 
@@ -40,6 +42,9 @@ uint32_t ble_scanner_event_queue_high_watermark(void);
 uint32_t ble_scanner_report_drop_count(void);
 uint32_t ble_scanner_discovery_report_count(void);
 uint32_t ble_scanner_filter_match_count(void);
+ble_scan_timing_window_t ble_scanner_take_timing_window(void);
+ble_scan_timing_window_t ble_scanner_last_timing_window(void);
+void ble_scanner_record_report_queue_wait_us(uint32_t wait_us);
 
 /* Diagnostic-only producer. It uses the same queue consumed by device_manager. */
 bool ble_scanner_submit_diagnostic_report(const ble_scan_report_t *report);

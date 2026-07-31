@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_random.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/task.h"
@@ -208,6 +209,9 @@ static void device_manager_task(void *parameter)
             if (scanner_event.type == BLE_SCANNER_EVENT_STATE) {
                 manager_handle_scanner_state(&scanner_event, wall_ms);
             } else if (scanner_event.type == BLE_SCANNER_EVENT_REPORT) {
+                int64_t queue_wait_us = esp_timer_get_time() - scanner_event.enqueued_at_us;
+                ble_scanner_record_report_queue_wait_us(queue_wait_us > UINT32_MAX ?
+                                                          UINT32_MAX : (uint32_t)queue_wait_us);
                 manager_process_report(&scanner_event.report, wall_ms);
             }
         }

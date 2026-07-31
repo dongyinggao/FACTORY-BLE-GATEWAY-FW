@@ -42,6 +42,7 @@ static void print_status_row(const char *name, const char *value)
 static void print_status(void)
 {
     const gateway_config_t *config = gateway_config_get();
+    ble_scan_timing_window_t timing = ble_scanner_last_timing_window();
     char value[96];
 
     printf("\nGateway status\n");
@@ -63,12 +64,24 @@ static void print_status(void)
              (unsigned int)device_manager_capture_queue_depth(),
              (unsigned int)device_manager_upload_queue_depth());
     print_status_row("Queue depth", value);
-    snprintf(value, sizeof(value), "scan=%lu, ui=%lu, capture=%lu, upload=%lu",
+    snprintf(value, sizeof(value), "scan=%lu[%u], ui=%lu[%u], capture=%lu[%u], upload=%lu[%u]",
              (unsigned long)ble_scanner_event_queue_high_watermark(),
+             (unsigned int)BLE_EVENT_QUEUE_MAX_LEN,
              (unsigned long)device_manager_ui_queue_high_watermark(),
+             (unsigned int)DEVICE_MANAGER_UI_QUEUE_LEN,
              (unsigned long)device_manager_capture_queue_high_watermark(),
-             (unsigned long)device_manager_upload_queue_high_watermark());
+             (unsigned int)DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN,
+             (unsigned long)device_manager_upload_queue_high_watermark(),
+             (unsigned int)DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN);
     print_status_row("Queue high water", value);
+    snprintf(value, sizeof(value), "avg=%lu us, max=%lu us",
+             (unsigned long)timing.callback_avg_us, (unsigned long)timing.callback_max_us);
+    print_status_row("Scan callback 30s", value);
+    snprintf(value, sizeof(value), "samples=%lu, avg=%lu us, max=%lu us",
+             (unsigned long)timing.queue_wait_samples,
+             (unsigned long)timing.queue_wait_avg_us,
+             (unsigned long)timing.queue_wait_max_us);
+    print_status_row("Scan wait 30s", value);
     snprintf(value, sizeof(value), "scan=%lu, ui=%lu, capture=%lu, upload=%lu",
              (unsigned long)ble_scanner_report_drop_count(),
              (unsigned long)device_manager_ui_drop_count(),
@@ -83,7 +96,7 @@ static void print_status(void)
     snprintf(value, sizeof(value), "Wi-Fi=%s, MQTT=%s, SNTP=%s",
              network_manager_status_text(), mqtt_service_status_text(), time_service_status_text());
     print_status_row("Network", value);
-    snprintf(value, sizeof(value), "%s, %lu messages, %lu B, failures=%lu",
+    snprintf(value, sizeof(value), "%s, %lu messages, %lu B, historical_failures=%lu",
              gateway_outbox_status_text(), (unsigned long)gateway_outbox_pending_count(),
              (unsigned long)gateway_outbox_pending_bytes(),
              (unsigned long)gateway_outbox_failure_count());

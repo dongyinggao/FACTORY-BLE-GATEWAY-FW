@@ -68,9 +68,10 @@ int gateway_json_encode_health(char *out, size_t size, const gateway_health_mess
         !append(out,size,&used,"\"registered_devices\":%u,\"broadcasting_devices\":%u,\"scan_reports_30s\":%lu,\"filter_matched_30s\":%lu,",
                 (unsigned int)m->registered_devices, (unsigned int)m->broadcasting_devices,
                 (unsigned long)m->scan_reports_30s, (unsigned long)m->filter_matched_30s) ||
-        !append(out,size,&used,"\"queue_high_water\":{\"scan\":%lu,\"ui\":%lu,\"capture\":%lu,\"upload\":%lu},",
-                (unsigned long)m->scan_queue_high_water, (unsigned long)m->ui_queue_high_water,
-                (unsigned long)m->capture_queue_high_water, (unsigned long)m->upload_queue_high_water) ||
+        !append(out,size,&used,"\"scan_timing_30s\":{\"callback_avg_us\":%lu,\"callback_max_us\":%lu,\"queue_wait_samples\":%lu,\"queue_wait_avg_us\":%lu,\"queue_wait_max_us\":%lu},",
+                (unsigned long)m->scan_callback_avg_us, (unsigned long)m->scan_callback_max_us,
+                (unsigned long)m->scan_queue_wait_samples, (unsigned long)m->scan_queue_wait_avg_us,
+                (unsigned long)m->scan_queue_wait_max_us) ||
         !append(out,size,&used,"\"dropped_events\":{\"scan\":%lu,\"ui\":%lu,\"capture\":%lu,\"upload\":%lu}}",
                 (unsigned long)m->scan_dropped, (unsigned long)m->ui_dropped,
                 (unsigned long)m->capture_dropped, (unsigned long)m->upload_dropped)) return -1;

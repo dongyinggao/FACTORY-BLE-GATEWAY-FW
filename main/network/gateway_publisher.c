@@ -63,6 +63,7 @@ static void enqueue_health(void)
     char json[GATEWAY_JSON_MAX_LEN], id[GATEWAY_EVENT_ID_MAX_LEN];
     uint32_t discovery_report_count = ble_scanner_discovery_report_count();
     uint32_t filter_match_count = ble_scanner_filter_match_count();
+    ble_scan_timing_window_t timing = ble_scanner_take_timing_window();
     gateway_health_message_t message = {
         .event_id = id,
         .config = gateway_config_get(),
@@ -80,10 +81,11 @@ static void enqueue_health(void)
         .broadcasting_devices = device_manager_broadcasting_count(),
         .scan_reports_30s = discovery_report_count - previous_discovery_report_count,
         .filter_matched_30s = filter_match_count - previous_filter_match_count,
-        .scan_queue_high_water = ble_scanner_event_queue_high_watermark(),
-        .ui_queue_high_water = device_manager_ui_queue_high_watermark(),
-        .capture_queue_high_water = device_manager_capture_queue_high_watermark(),
-        .upload_queue_high_water = device_manager_upload_queue_high_watermark(),
+        .scan_callback_avg_us = timing.callback_avg_us,
+        .scan_callback_max_us = timing.callback_max_us,
+        .scan_queue_wait_samples = timing.queue_wait_samples,
+        .scan_queue_wait_avg_us = timing.queue_wait_avg_us,
+        .scan_queue_wait_max_us = timing.queue_wait_max_us,
         .scan_dropped = ble_scanner_report_drop_count(),
         .ui_dropped = device_manager_ui_drop_count(),
         .capture_dropped = device_manager_capture_drop_count(),
@@ -94,9 +96,14 @@ static void enqueue_health(void)
     previous_filter_match_count = filter_match_count;
     gateway_event_id_make(id,sizeof(id),boot_id,++sequence);
     if (gateway_json_encode_health(json, sizeof(json), &message) >= 0) {
-        ESP_LOGI(TAG, "health: scan_30s=%lu matched_30s=%lu devices=%u/%u drops=%lu/%lu/%lu/%lu",
+        ESP_LOGI(TAG, "health: scan_30s=%lu matched_30s=%lu cb_us=%lu/%lu wait_us=%lu/%lu/%lu devices=%u/%u drops=%lu/%lu/%lu/%lu",
                  (unsigned long)message.scan_reports_30s,
                  (unsigned long)message.filter_matched_30s,
+                 (unsigned long)message.scan_callback_avg_us,
+                 (unsigned long)message.scan_callback_max_us,
+                 (unsigned long)message.scan_queue_wait_samples,
+                 (unsigned long)message.scan_queue_wait_avg_us,
+                 (unsigned long)message.scan_queue_wait_max_us,
                  (unsigned int)message.registered_devices,
                  (unsigned int)message.broadcasting_devices,
                  (unsigned long)message.scan_dropped,

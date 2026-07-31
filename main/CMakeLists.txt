@@ -3,6 +3,7 @@ idf_component_register(SRCS
                        "app/app_ui.c"
                        "ble/ble_scanner.c"
                        "ble/device_filter.c"
+                       "ble/scan_timing_core.c"
                        "device/device_manager.c"
                        "device/device_manager_core.c"
                        "storage/csv_formatter.c"

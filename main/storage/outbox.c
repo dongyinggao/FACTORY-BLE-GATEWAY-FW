@@ -413,8 +413,8 @@ const char *gateway_outbox_status_text(void)
     if (core.stored_bytes >= core.capacity_bytes) {
         return "Full";
     }
-    if (core.failure_count > 0) {
-        return "Error";
-    }
+    /* failure_count is an evidence counter for this boot, not a current
+     * availability flag. A recovered Outbox must report Ready while retaining
+     * the count for field diagnostics. */
     return "Ready";
 }
