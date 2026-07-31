@@ -149,17 +149,19 @@ static void app_ui_task(void *parameter)
 
     (void)parameter;
     while (true) {
-        BaseType_t received = xQueueReceive(event_queue, &event, pdMS_TO_TICKS(1000));
+        if (xQueueReceive(event_queue, &event, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
 
         if (!bsp_display_lock(100)) {
             continue;
         }
 
-        if (received == pdTRUE) {
+        if (event.type != DEVICE_MANAGER_EVENT_STATUS_CHANGED) {
             device_count = event.device_count;
             broadcasting_count = event.broadcasting_count;
         }
-        if (received == pdTRUE && event.type == DEVICE_MANAGER_EVENT_SCANNER_STATE) {
+        if (event.type == DEVICE_MANAGER_EVENT_SCANNER_STATE) {
             lv_label_set_text(scanner_status_label, scanner_state_text(event.scanner_state));
             lv_label_set_text(toggle_label, scanner_button_text(event.scanner_state));
             if (event.scanner_state == BLE_SCANNER_STATE_ERROR) {
@@ -168,7 +170,7 @@ static void app_ui_task(void *parameter)
                 update_device_list();
             }
         } else {
-            if (received == pdTRUE) {
+            if (event.type == DEVICE_MANAGER_EVENT_DEVICE_CHANGED) {
                 update_recent_device(&event);
             }
             update_device_list();

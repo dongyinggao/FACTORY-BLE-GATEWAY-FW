@@ -10,6 +10,7 @@
 typedef enum {
     DEVICE_MANAGER_EVENT_SCANNER_STATE,
     DEVICE_MANAGER_EVENT_DEVICE_CHANGED,
+    DEVICE_MANAGER_EVENT_STATUS_CHANGED,
 } device_manager_event_type_t;
 
 typedef struct {
@@ -29,6 +30,7 @@ typedef struct {
 
 void device_manager_init(void);
 QueueHandle_t device_manager_get_ui_event_queue(void);
+void device_manager_request_ui_status_refresh(void);
 QueueHandle_t device_manager_get_capture_queue(void);
 QueueHandle_t device_manager_get_upload_queue(void);
 uint32_t device_manager_capture_drop_count(void);

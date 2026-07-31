@@ -12,6 +12,7 @@
 
 #include "outbox_core.h"
 #include "storage_manager.h"
+#include "device_manager.h"
 
 #define OUTBOX_DIR BSP_SD_MOUNT_POINT "/outbox"
 #define OUTBOX_SEGMENT_BYTES (256U * 1024U)
@@ -91,6 +92,7 @@ static void storage_failure_locked(const char *message)
     current_inflight = false;
     current_health = false;
     storage_manager_report_io_failure();
+    device_manager_request_ui_status_refresh();
     ESP_LOGE(TAG, "%s", message);
 }
 
@@ -169,6 +171,7 @@ static void recover_locked(void)
     recovered_generation = storage_manager_generation();
     ESP_LOGI(TAG, "outbox recovered; %lu bytes, %lu messages", (unsigned long)core.stored_bytes,
              (unsigned long)core.pending_messages);
+    device_manager_request_ui_status_refresh();
 }
 
 static void sync_storage_locked(void)
@@ -213,6 +216,7 @@ static bool append_segment_locked(const char *json)
     }
     gateway_outbox_core_record_append(&core, (uint32_t)bytes);
     append_segment_size += (uint32_t)bytes;
+    device_manager_request_ui_status_refresh();
     return true;
 }
 
@@ -324,6 +328,7 @@ bool gateway_outbox_next(char output[OUTBOX_MESSAGE_MAX_LEN], bool *is_health)
         }
         read_path[0] = '\0';
         read_offset = 0;
+        device_manager_request_ui_status_refresh();
     }
     if (!promote_next_health_locked()) {
         storage_manager_unlock();
@@ -376,6 +381,7 @@ void gateway_outbox_ack_current(void)
     current_inflight = false;
     current_health = false;
     storage_manager_unlock();
+    device_manager_request_ui_status_refresh();
 }
 
 void gateway_outbox_release_current(void)

@@ -11,6 +11,7 @@
 
 #include "gateway_config.h"
 #include "time_service.h"
+#include "device_manager.h"
 
 static const char *TAG = "wifi_manager";
 static bool connected;
@@ -65,6 +66,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         connected = false;
         connecting = false;
         ESP_LOGW(TAG, "Wi-Fi disconnected; reconnecting");
+        device_manager_request_ui_status_refresh();
     }
 }
 
@@ -79,6 +81,7 @@ static void ip_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     reconnect_delay_ms = 1000;
     ESP_LOGI(TAG, "Wi-Fi connected");
     time_service_start_sync();
+    device_manager_request_ui_status_refresh();
 }
 
 static bool wifi_initialize(void)
@@ -124,6 +127,7 @@ static bool wifi_initialize(void)
 
 failed:
     ESP_LOGE(TAG, "Wi-Fi unavailable (%s); BLE and CSV continue", esp_err_to_name(result));
+    device_manager_request_ui_status_refresh();
     return false;
 }
 
