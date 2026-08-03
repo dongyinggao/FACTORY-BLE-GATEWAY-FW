@@ -1,6 +1,7 @@
 #include "csv_logger.h"
 
 #include <stdio.h>
+#include <errno.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -20,6 +21,19 @@ static const char *CSV_HEADER =
     "recorded_at,time_synced,event_uptime_s,gateway_id,gateway_location,device_mac,device_name,"
     "event,broadcast_id,broadcast_started_at,broadcast_ended_at,broadcast_duration_s,"
     "end_detected_at,last_rssi";
+
+static void csv_report_write_failure(const char *message)
+{
+    int error_code = errno;
+
+    ESP_LOGE(TAG, "%s: errno=%d", message, error_code);
+    if (error_code == ENOSPC) {
+        storage_manager_report_full(error_code);
+    } else {
+        storage_manager_report_io_failure(error_code);
+    }
+}
+
 static void csv_write_event(const device_lifecycle_event_t *event)
 {
     const gateway_config_t *config = gateway_config_get();
@@ -39,6 +53,10 @@ static void csv_write_event(const device_lifecycle_event_t *event)
     if (!storage_manager_lock()) {
         return;
     }
+    if (!storage_manager_is_ready()) {
+        storage_manager_unlock();
+        return;
+    }
     now = time(NULL);
     localtime_r(&now, &local_time);
     if (local_time.tm_year + 1900 < 2024) {
@@ -50,8 +68,7 @@ static void csv_write_event(const device_lifecycle_event_t *event)
     file = fopen(path, "a+");
 
     if (file == NULL) {
-        ESP_LOGE(TAG, "unable to open CSV file");
-        storage_manager_report_io_failure();
+        csv_report_write_failure("unable to open CSV file");
         storage_manager_unlock();
         return;
     }
@@ -65,15 +82,13 @@ static void csv_write_event(const device_lifecycle_event_t *event)
             fclose(file);
             snprintf(backup_path, sizeof(backup_path), BSP_SD_MOUNT_POINT "/data/%s.OLD", date_name);
             if (rename(path, backup_path) != 0) {
-                ESP_LOGE(TAG, "CSV schema mismatch; unable to preserve %s", path);
-                storage_manager_report_io_failure();
+                csv_report_write_failure("CSV schema mismatch; unable to preserve previous file");
                 storage_manager_unlock();
                 return;
             }
             file = fopen(path, "w");
             if (file == NULL) {
-                ESP_LOGE(TAG, "unable to create CSV file after schema migration");
-                storage_manager_report_io_failure();
+                csv_report_write_failure("unable to create CSV file after schema migration");
                 storage_manager_unlock();
                 return;
             }
@@ -87,10 +102,10 @@ static void csv_write_event(const device_lifecycle_event_t *event)
         storage_manager_unlock();
         return;
     }
-    fputs(line, file);
-    if (fflush(file) != 0 || fsync(fileno(file)) != 0) {
-        ESP_LOGE(TAG, "CSV sync failed");
-        storage_manager_report_io_failure();
+    if (fputs(line, file) == EOF || fflush(file) != 0 || fsync(fileno(file)) != 0) {
+        csv_report_write_failure("CSV persistence failed");
+    } else {
+        storage_manager_report_write_success();
     }
     fclose(file);
     storage_manager_unlock();

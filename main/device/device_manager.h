@@ -26,7 +26,7 @@ typedef struct {
 } device_manager_ui_event_t;
 
 #define DEVICE_MANAGER_UI_QUEUE_LEN 32
-#define DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN 256
+#define DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN 512
 
 void device_manager_init(void);
 QueueHandle_t device_manager_get_ui_event_queue(void);
@@ -35,6 +35,7 @@ QueueHandle_t device_manager_get_capture_queue(void);
 QueueHandle_t device_manager_get_upload_queue(void);
 uint32_t device_manager_capture_drop_count(void);
 uint32_t device_manager_upload_drop_count(void);
+uint32_t device_manager_table_reject_count(void);
 uint32_t device_manager_ui_drop_count(void);
 uint16_t device_manager_registered_count(void);
 uint16_t device_manager_broadcasting_count(void);

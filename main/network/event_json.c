@@ -72,7 +72,10 @@ int gateway_json_encode_health(char *out, size_t size, const gateway_health_mess
                 (unsigned long)m->scan_callback_avg_us, (unsigned long)m->scan_callback_max_us,
                 (unsigned long)m->scan_queue_wait_samples, (unsigned long)m->scan_queue_wait_avg_us,
                 (unsigned long)m->scan_queue_wait_max_us) ||
-        !append(out,size,&used,"\"dropped_events\":{\"scan\":%lu,\"ui\":%lu,\"capture\":%lu,\"upload\":%lu}}",
+        !append(out,size,&used,"\"delivery\":{\"volatile_published\":%lu,\"unrecoverable_dropped\":%lu},"
+                             "\"dropped_events\":{\"scan\":%lu,\"ui\":%lu,\"capture\":%lu,\"upload\":%lu}}",
+                (unsigned long)m->volatile_published,
+                (unsigned long)m->unrecoverable_upload_dropped,
                 (unsigned long)m->scan_dropped, (unsigned long)m->ui_dropped,
                 (unsigned long)m->capture_dropped, (unsigned long)m->upload_dropped)) return -1;
     return (int)used;

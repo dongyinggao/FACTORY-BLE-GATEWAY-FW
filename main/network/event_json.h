@@ -50,6 +50,8 @@ typedef struct {
     uint32_t ui_dropped;
     uint32_t capture_dropped;
     uint32_t upload_dropped;
+    uint32_t volatile_published;
+    uint32_t unrecoverable_upload_dropped;
 } gateway_health_message_t;
 
 void gateway_event_id_make(char *output, size_t output_size, uint32_t boot_id, uint32_t sequence);

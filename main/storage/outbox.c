@@ -85,13 +85,17 @@ static unsigned long path_segment_id(const char *path)
     return value;
 }
 
-static void storage_failure_locked(const char *message)
+static void storage_failure_locked(const char *message, int error_code)
 {
     gateway_outbox_core_record_failure(&core);
-    ready = false;
     current_inflight = false;
     current_health = false;
-    storage_manager_report_io_failure();
+    if (error_code == ENOSPC) {
+        storage_manager_report_full(error_code);
+    } else {
+        ready = false;
+        storage_manager_report_io_failure(error_code);
+    }
     device_manager_request_ui_status_refresh();
     ESP_LOGE(TAG, "%s", message);
 }
@@ -114,7 +118,7 @@ static bool promote_next_health_locked(void)
 {
     if (access(OUTBOX_HEALTH_FILE, F_OK) != 0 && access(OUTBOX_HEALTH_NEXT_FILE, F_OK) == 0 &&
         rename(OUTBOX_HEALTH_NEXT_FILE, OUTBOX_HEALTH_FILE) != 0) {
-        storage_failure_locked("unable to promote pending health record");
+        storage_failure_locked("unable to promote pending health record", errno);
         return false;
     }
     return true;
@@ -141,12 +145,12 @@ static void recover_locked(void)
     append_segment_size = 0;
 
     if (mkdir(OUTBOX_DIR, 0775) != 0 && errno != EEXIST) {
-        storage_failure_locked("cannot create outbox directory");
+        storage_failure_locked("cannot create outbox directory", errno);
         return;
     }
     dir = opendir(OUTBOX_DIR);
     if (dir == NULL) {
-        storage_failure_locked("cannot open outbox directory");
+        storage_failure_locked("cannot open outbox directory", errno);
         return;
     }
     while ((entry = readdir(dir)) != NULL) {
@@ -204,14 +208,14 @@ static bool append_segment_locked(const char *json)
     snprintf(path, sizeof(path), OUTBOX_DIR "/OB%05lu.LOG", append_segment_id);
     file = fopen(path, "a");
     if (file == NULL) {
-        storage_failure_locked("unable to open broadcast segment");
+        storage_failure_locked("unable to open broadcast segment", errno);
         return false;
     }
     ok = fputs(json, file) >= 0 && fputc('\n', file) != EOF && fflush(file) == 0 &&
          fsync(fileno(file)) == 0;
     fclose(file);
     if (!ok) {
-        storage_failure_locked("broadcast persistence failed");
+        storage_failure_locked("broadcast persistence failed", errno);
         return false;
     }
     gateway_outbox_core_record_append(&core, (uint32_t)bytes);
@@ -258,7 +262,7 @@ bool gateway_outbox_store_health(const char *json)
     const char *path;
     bool result;
 
-    if (json == NULL || !storage_manager_lock()) {
+    if (json == NULL || storage_manager_is_full() || !storage_manager_lock()) {
         return false;
     }
     sync_storage_locked();
@@ -269,7 +273,7 @@ bool gateway_outbox_store_health(const char *json)
     path = current_inflight && current_health ? OUTBOX_HEALTH_NEXT_FILE : OUTBOX_HEALTH_FILE;
     result = write_durable_file(path, json);
     if (!result) {
-        storage_failure_locked("health persistence failed");
+        storage_failure_locked("health persistence failed", errno);
     }
     storage_manager_unlock();
     return result;
@@ -302,7 +306,7 @@ bool gateway_outbox_next(char output[OUTBOX_MESSAGE_MAX_LEN], bool *is_health)
             if (file != NULL) {
                 fclose(file);
             }
-            storage_failure_locked("unable to read outbox segment");
+            storage_failure_locked("unable to read outbox segment", errno);
             storage_manager_unlock();
             return false;
         }
@@ -318,11 +322,12 @@ bool gateway_outbox_next(char output[OUTBOX_MESSAGE_MAX_LEN], bool *is_health)
         }
         fclose(file);
         if (stat(read_path, &st) != 0 || unlink(read_path) != 0) {
-            storage_failure_locked("unable to remove acknowledged outbox segment");
+            storage_failure_locked("unable to remove acknowledged outbox segment", errno);
             storage_manager_unlock();
             return false;
         }
         gateway_outbox_core_remove_segment(&core, (uint32_t)st.st_size);
+        storage_manager_report_write_success();
         if (append_segment_id == path_segment_id(read_path)) {
             append_segment_size = 0;
         }
@@ -370,9 +375,10 @@ void gateway_outbox_ack_current(void)
     }
     if (current_health) {
         if (unlink(OUTBOX_HEALTH_FILE) != 0 && errno != ENOENT) {
-            storage_failure_locked("unable to acknowledge health record");
+            storage_failure_locked("unable to acknowledge health record", errno);
         } else {
             (void)promote_next_health_locked();
+            storage_manager_report_write_success();
         }
     } else {
         read_offset = current_next_offset;
@@ -407,6 +413,9 @@ uint32_t gateway_outbox_failure_count(void)
 
 const char *gateway_outbox_status_text(void)
 {
+    if (storage_manager_is_full()) {
+        return "Full";
+    }
     if (!gateway_outbox_is_ready()) {
         return "No SD";
     }

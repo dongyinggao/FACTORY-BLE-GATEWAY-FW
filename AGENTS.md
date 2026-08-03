@@ -57,7 +57,9 @@ touch control, active scanning, UI updates, and serial logs on a CoreS3-SE.
 ## Commit & Pull Request Guidelines
 
 Recent history uses short Chinese imperative summaries, for example `添加自定义flash分区表`.
-Keep commits focused and describe the subsystem affected. PRs should state
+Keep commits focused and describe the subsystem affected. Every commit must include a body with
+`Why` (problem or motivation), `What` (scope of changes), and `How` (implementation approach and
+verification); use this format even for small fixes. PRs should state
 the target board, configuration changes, build/test commands run, and any
 hardware-only checks still pending. Include LCD screenshots or serial logs
 when a UI or BLE behavior changes.
