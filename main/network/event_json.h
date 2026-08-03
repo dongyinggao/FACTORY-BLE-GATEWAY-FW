@@ -41,10 +41,11 @@ typedef struct {
     uint16_t broadcasting_devices;
     uint32_t scan_reports_30s;
     uint32_t filter_matched_30s;
-    uint32_t scan_queue_high_water;
-    uint32_t ui_queue_high_water;
-    uint32_t capture_queue_high_water;
-    uint32_t upload_queue_high_water;
+    uint32_t scan_callback_avg_us;
+    uint32_t scan_callback_max_us;
+    uint32_t scan_queue_wait_samples;
+    uint32_t scan_queue_wait_avg_us;
+    uint32_t scan_queue_wait_max_us;
     uint32_t scan_dropped;
     uint32_t ui_dropped;
     uint32_t capture_dropped;

@@ -93,11 +93,15 @@ static void print_stress_status(void)
            stress_run.task == NULL ? "idle" : "running",
            (unsigned int)stress_run.requested, (unsigned int)stress_run.submitted,
            (unsigned int)stress_run.rejected, (unsigned int)stress_run.rate_per_second);
-    printf("queue_high_water=scan:%lu ui:%lu capture:%lu upload:%lu\n",
+    printf("queue_high_water=scan:%lu[%u] ui:%lu[%u] capture:%lu[%u] upload:%lu[%u]\n",
            (unsigned long)ble_scanner_event_queue_high_watermark(),
+           (unsigned int)BLE_EVENT_QUEUE_MAX_LEN,
            (unsigned long)device_manager_ui_queue_high_watermark(),
+           (unsigned int)DEVICE_MANAGER_UI_QUEUE_LEN,
            (unsigned long)device_manager_capture_queue_high_watermark(),
-           (unsigned long)device_manager_upload_queue_high_watermark());
+           (unsigned int)DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN,
+           (unsigned long)device_manager_upload_queue_high_watermark(),
+           (unsigned int)DEVICE_MANAGER_LIFECYCLE_QUEUE_LEN);
 }
 
 static int stress_command(int argc, char **argv)

@@ -43,10 +43,11 @@ int main(void)
         .broadcasting_devices = 2,
         .scan_reports_30s = 99,
         .filter_matched_30s = 12,
-        .scan_queue_high_water = 2,
-        .ui_queue_high_water = 3,
-        .capture_queue_high_water = 4,
-        .upload_queue_high_water = 5,
+        .scan_callback_avg_us = 13,
+        .scan_callback_max_us = 41,
+        .scan_queue_wait_samples = 12,
+        .scan_queue_wait_avg_us = 90,
+        .scan_queue_wait_max_us = 245,
         .scan_dropped = 1,
         .ui_dropped = 2,
         .capture_dropped = 0,
@@ -57,7 +58,8 @@ int main(void)
     assert(strstr(json, "\"outbox_failures\":3") != NULL);
     assert(strstr(json, "\"registered_devices\":4") != NULL);
     assert(strstr(json, "\"filter_matched_30s\":12") != NULL);
-    assert(strstr(json, "\"queue_high_water\":{\"scan\":2,\"ui\":3,\"capture\":4,\"upload\":5}") != NULL);
+    assert(strstr(json, "\"scan_timing_30s\":{\"callback_avg_us\":13,\"callback_max_us\":41,\"queue_wait_samples\":12,\"queue_wait_avg_us\":90,\"queue_wait_max_us\":245}") != NULL);
+    assert(strstr(json, "\"queue_high_water\"") == NULL);
     assert(strstr(json, "\"dropped_events\":{\"scan\":1,\"ui\":2,\"capture\":0,\"upload\":1}") != NULL);
     puts("event_json tests passed");
     return 0;

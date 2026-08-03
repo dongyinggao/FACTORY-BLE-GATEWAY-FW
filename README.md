@@ -96,7 +96,8 @@ ESP-IDF 项目可将该组件直接加入依赖，并自行实现业务状态页
 ### 队列高水位说明
 
 `sys status` 中的 `Queue depth` 是命令执行时的当前积压量；`Queue high water` 是本次上电以来
-出现过的最大积压量。字段与数据流对应如下：
+出现过的最大积压量。高水位以 `峰值[最大长度]` 显示，例如 `upload=227[256]` 表示上传队列
+曾积压 227 条，容量为 256，尚余 29 条缓冲。字段与数据流对应如下：
 
 | 字段 | 队列 | 生产者 → 消费者 | 用途 |
 | --- | --- | --- | --- |
@@ -107,6 +108,10 @@ ESP-IDF 项目可将该组件直接加入依赖，并自行实现业务状态页
 
 高水位接近队列容量但 `Dropped events=0` 时，说明出现过短暂积压但尚未丢失事件；应结合
 `Dropped events`、Outbox 状态和 MQTT/SD 日志判断是否需要优化消费者处理能力。
+
+`sys status` 的 Outbox 行反映当前可用性：`No SD` 表示当前不能持久化、`Full` 表示达到容量上限、
+`Ready` 表示当前可读写。`historical_failures` 是本次启动以来的失败累计数；即使 SD/MQTT 已恢复、
+Outbox 已清空，该数也会保留，不能单独用于判断当前异常。
 
 ### 128 台设备硬件链路压力测试
 
@@ -133,7 +138,7 @@ sys status         # 队列深度、高水位与丢弃计数
 
 - `registered_devices`、`broadcasting_devices`：当前设备表与广播轮次数；
 - `scan_reports_30s`、`filter_matched_30s`：过去 30 秒 NimBLE 已交付的扫描报告数和名称过滤命中数；
-- `queue_high_water`：本次启动以来扫描、UI、CSV、上传队列的峰值；
+- `scan_timing_30s`：最近窗口内扫描回调平均/最大耗时，以及有效目标报告在扫描队列中的平均/最大等待时间；
 - `dropped_events`：对应链路的累计丢弃数；应保持为零。
 
 串口每 30 秒同步输出一条简短的 `publisher: health` 摘要。LCD 的设备行显示
@@ -142,18 +147,21 @@ sys status         # 队列深度、高水位与丢弃计数
 例如：
 
 ```text
-publisher: health: scan_30s=3073 matched_30s=0 devices=127/0 drops=0/0/0/0
+publisher: health: scan_30s=3073 matched_30s=12 cb_us=18/76 wait_us=12/94/318 devices=127/0 drops=0/0/0/0
 ```
 
 | 参数 | 含义 |
 | --- | --- |
 | `scan_30s` | 最近约 30 秒 NimBLE 交付给 `scanner_gap_event()` 的所有发现报告数量；包含周围设备的广播、Scan Response 及去重缓存刷新后的重复报告，不等于目标设备数或 CSV 记录数。`3073` 约为 102 报告/秒。 |
 | `matched_30s` | 最近约 30 秒名称符合 `SM_ICM数字` / `SM_ICD数字` 规则的报告数量；这些报告才会进入设备管理器。 |
+| `cb_us=avg/max` | 最近 30 秒所有 NimBLE 发现回调的平均/最大执行时间，单位微秒；包含广播字段解析、名称过滤和目标报告入队。它用于观察回调本身是否成为高负载瓶颈。 |
+| `wait_us=samples/avg/max` | 最近 30 秒成功进入扫描队列的目标报告数、从入队到设备管理器取出的平均等待时间和最大等待时间，单位微秒；用于观察设备管理器是否跟得上扫描输入。 |
 | `devices=A/B` | `A` 为当前设备表累计登记的目标 MAC 数，`B` 为当前正在一轮广播生命周期中的设备数。已结束的设备仍保留在设备表，直到重启。 |
 | `drops=scan/ui/capture/upload` | 本次启动以来扫描、UI、CSV、上传四条事件队列的累计丢弃数；四项均为 `0` 表示未因队列满载而丢失应用事件。 |
 
-在 `scan_30s` 较高时，应优先观察 `drops`、`Queue high water`、SD/Outbox 状态，而不是仅以
-扫描报告总数判断系统负载是否异常。
+在 `scan_30s` 较高时，应优先观察 `cb_us`、`wait_us`、`drops`、`Queue high water`、SD/Outbox
+状态，而不是仅以扫描报告总数判断系统负载是否异常。回调或等待时间持续上升、同时队列高水位
+接近容量，才是消费者处理能力不足的直接信号。
 
 ## 主机单元测试
 
