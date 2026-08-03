@@ -1,0 +1,12 @@
+menu "System diagnostics"
+
+config SYSTEM_DIAGNOSTICS_TASKS_ENABLED
+    bool "Enable task and CPU diagnostics"
+    default n
+    select FREERTOS_USE_TRACE_FACILITY
+    select FREERTOS_GENERATE_RUN_TIME_STATS
+    help
+        Enables task state, cumulative CPU runtime share, and stack
+        high-water-mark output. Enable this in diagnostic firmware builds.
+
+endmenu

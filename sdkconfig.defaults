@@ -19,11 +19,11 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v1/16m.csv"
 # end of Partition Table
 
 #
-# BLE Gateway diagnostics
+# System diagnostics
 #
-CONFIG_BLE_GATEWAY_SYS_TASKS_ENABLED=y
+CONFIG_SYSTEM_DIAGNOSTICS_TASKS_ENABLED=y
 CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
-# end of BLE Gateway diagnostics
+# end of System diagnostics
 
 #
 # Component config
