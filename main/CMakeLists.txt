@@ -26,4 +26,5 @@ idf_component_register(SRCS
                        "network/ota_command_core.c"
                        "network/ota_command.c"
                        PRIV_REQUIRES bt nvs_flash m5stack_core_s3 lvgl__lvgl esp_wifi esp_netif esp_event console mqtt esp_timer system_diagnostics esp_http_client app_update mbedtls json
+                       EMBED_TXTFILES "network/certs/ble_gateway_uat_ota.pem"
                        INCLUDE_DIRS "app" "ble" "device" "storage" "config" "network")

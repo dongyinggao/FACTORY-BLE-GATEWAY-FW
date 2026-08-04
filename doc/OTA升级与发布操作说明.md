@@ -47,6 +47,10 @@ source /home/sm-dawn/.espressif/v5.5.5/esp-idf/export.sh
 脚本会读取镜像内的 ESP-IDF 应用描述，确认其版本为 `1.0.1`、项目名为 `ble_gateway`，再生成
 大小和 SHA-256。发布服务器提供生成的静态 JSON Manifest，例如：
 
+仓库根目录的 `ota/` 仅用于**本机暂存**待上传的 `.bin`、Manifest 和可选页面，相关文件已被
+`.gitignore` 排除；正式发布内容由受控 OTA 文件服务器独立保存、备份和授权。提交固件源代码时
+只提交发布工具、流程说明和必要的公开根证书，禁止提交发布镜像、私钥、密码或生产证书。
+
 ```json
 {
   "schema_version": 1,
@@ -94,6 +98,10 @@ ota start --allow-downgrade
 完成写入后设备重启到新分区。新固件必须在 10 秒内恢复 BLE 扫描和 SD 存储；否则，或首次
 启动期间断电/崩溃，Bootloader 会回滚到上一有效镜像。NVS 中的网关 ID、位置、网络参数和
 扫描参数不会被 OTA 覆盖。
+
+网关使用外部电源，Wi-Fi 初始化后固定设为 `WIFI_PS_NONE`；升级期间无需再切换或恢复省电
+模式。该取舍增加了常态功耗，但可降低 Wi-Fi 休眠对连续 BLE 采集、MQTT 和 HTTPS OTA 传输
+的影响。
 
 ## 发布验收
 

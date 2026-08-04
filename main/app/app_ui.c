@@ -23,6 +23,7 @@
 #define APP_UI_MIN_REFRESH_MS 250U
 
 static lv_obj_t *scanner_status_label;
+static lv_obj_t *firmware_version_label;
 static lv_obj_t *device_count_label;
 static lv_obj_t *network_status_label;
 static lv_obj_t *device_rows[DEVICE_LIST_VISIBLE_ROWS];
@@ -163,10 +164,34 @@ static const char *ota_status_text(void)
 
 static void update_network_status(void)
 {
+    char ota_text[16];
+
+    if (ota_manager_get_state() == OTA_MANAGER_STATE_DOWNLOADING && ota_manager_image_size() != 0U) {
+        snprintf(ota_text, sizeof(ota_text), "DL %lu%%",
+                 (unsigned long)((ota_manager_downloaded_bytes() * 100U) /
+                                 ota_manager_image_size()));
+    } else {
+        snprintf(ota_text, sizeof(ota_text), "%s", ota_status_text());
+    }
     lv_label_set_text_fmt(network_status_label, "WiFi:%s MQTT:%s Outbox:%lu OTA:%s",
                           service_status_text(network_manager_status_text()),
                           service_status_text(mqtt_service_status_text()),
-                          (unsigned long)gateway_outbox_pending_count(), ota_status_text());
+                          (unsigned long)gateway_outbox_pending_count(), ota_text);
+}
+
+static void update_firmware_version(void)
+{
+    const char *verification;
+
+    if (ota_manager_pending_release_sequence() != 0U) {
+        verification = "VERIFY";
+    } else if (ota_manager_confirmed_release_sequence() != 0U) {
+        verification = "OK";
+    } else {
+        verification = "";
+    }
+    lv_label_set_text_fmt(firmware_version_label, "FW:%s %s", ota_manager_running_version(),
+                          verification);
 }
 
 static void scanner_toggle_cb(lv_event_t *event)
@@ -193,6 +218,7 @@ static void app_ui_render(void)
 
     lv_label_set_text(scanner_status_label, scanner_state_text(displayed_scanner_state));
     lv_label_set_text(toggle_label, scanner_button_text(displayed_scanner_state));
+    update_firmware_version();
     if (displayed_scanner_state == BLE_SCANNER_STATE_ERROR) {
         lv_label_set_text_fmt(device_count_label, "Scanner error: %d", displayed_scanner_error);
     } else {
@@ -273,26 +299,32 @@ void app_ui_start(void)
     lv_label_set_text(title, "CoreS3-SE BLE Gateway");
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
 
+    firmware_version_label = lv_label_create(lv_scr_act());
+    lv_obj_set_width(firmware_version_label, 316);
+    lv_label_set_long_mode(firmware_version_label, LV_LABEL_LONG_CLIP);
+    lv_obj_align(firmware_version_label, LV_ALIGN_TOP_MID, 0, 25);
+    update_firmware_version();
+
     scanner_status_label = lv_label_create(lv_scr_act());
     displayed_scanner_state = ble_scanner_get_state();
     lv_label_set_text(scanner_status_label, scanner_state_text(displayed_scanner_state));
-    lv_obj_align(scanner_status_label, LV_ALIGN_TOP_MID, 0, 35);
+    lv_obj_align(scanner_status_label, LV_ALIGN_TOP_MID, 0, 43);
 
     device_count_label = lv_label_create(lv_scr_act());
     lv_label_set_text(device_count_label, "Dev:0 Bcast:0 SD:Retry E:-1");
-    lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 55);
+    lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 61);
 
     network_status_label = lv_label_create(lv_scr_act());
     lv_obj_set_width(network_status_label, 316);
     lv_label_set_long_mode(network_status_label, LV_LABEL_LONG_CLIP);
     lv_label_set_text(network_status_label, "WiFi:Wait MQTT:Wait Outbox:0 OTA:Idle");
-    lv_obj_align(network_status_label, LV_ALIGN_TOP_MID, 0, 73);
+    lv_obj_align(network_status_label, LV_ALIGN_TOP_MID, 0, 79);
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {
         device_rows[row] = lv_label_create(lv_scr_act());
         lv_label_set_long_mode(device_rows[row], LV_LABEL_LONG_CLIP);
         lv_obj_set_width(device_rows[row], 300);
-        lv_obj_align(device_rows[row], LV_ALIGN_TOP_MID, 0, 91 + (int32_t)(row * 27));
+        lv_obj_align(device_rows[row], LV_ALIGN_TOP_MID, 0, 97 + (int32_t)(row * 25));
     }
     update_device_list();
     update_network_status();

@@ -28,6 +28,17 @@ static uint32_t network_now_ms(void)
     return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 }
 
+static void wifi_disable_power_save(void)
+{
+    esp_err_t result = esp_wifi_set_ps(WIFI_PS_NONE);
+
+    if (result != ESP_OK) {
+        ESP_LOGW(TAG, "unable to disable Wi-Fi power save: %s", esp_err_to_name(result));
+        return;
+    }
+    ESP_LOGI(TAG, "Wi-Fi power save disabled (external-power gateway)");
+}
+
 static void wifi_apply(void)
 {
     const gateway_config_t *config = gateway_config_get();
@@ -118,6 +129,9 @@ static bool wifi_initialize(void)
     if (result != ESP_OK) {
         goto failed;
     }
+    /* The gateway uses external power and prioritizes continuous BLE capture
+     * and reliable MQTT/OTA transfers over Wi-Fi power consumption. */
+    wifi_disable_power_save();
     initialized = true;
     /* WIFI_EVENT_STA_START already applies the current configuration. Mark
      * this revision as applied so the worker does not immediately disconnect
