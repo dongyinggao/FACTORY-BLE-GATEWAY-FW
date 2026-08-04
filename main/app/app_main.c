@@ -8,6 +8,7 @@
 #include "gateway_publisher.h"
 #include "mqtt_service.h"
 #include "network_manager.h"
+#include "ota_manager.h"
 #include "storage_manager.h"
 #include "stress_console.h"
 #include "gateway_status_console.h"
@@ -28,6 +29,7 @@ void app_main(void)
     system_diagnostics_register_console();
     gateway_status_console_register();
     stress_console_register();
+    ota_manager_register_console();
     time_service_init();
     ble_scanner_init();
     device_manager_init();
@@ -37,4 +39,6 @@ void app_main(void)
     network_manager_start();
     mqtt_service_start();
     gateway_publisher_start();
+    ota_manager_start();
+    ota_manager_confirm_running_app();
 }

@@ -13,6 +13,7 @@
 #define GATEWAY_NTP_SERVER_MAX_LEN 64
 #define GATEWAY_TIMEZONE_MAX_LEN 40
 #define GATEWAY_NAME_RULES_MAX_LEN 128
+#define GATEWAY_OTA_MANIFEST_URI_MAX_LEN 192
 
 typedef struct {
     char gateway_id[GATEWAY_ID_MAX_LEN];
@@ -27,6 +28,7 @@ typedef struct {
     char ntp_server[GATEWAY_NTP_SERVER_MAX_LEN];
     char timezone[GATEWAY_TIMEZONE_MAX_LEN];
     char name_rules[GATEWAY_NAME_RULES_MAX_LEN];
+    char ota_manifest_uri[GATEWAY_OTA_MANIFEST_URI_MAX_LEN];
     uint32_t config_ver;
 } gateway_config_t;
 
@@ -35,6 +37,7 @@ const gateway_config_t *gateway_config_get(void);
 bool gateway_config_is_complete(void);
 bool gateway_config_wifi_is_valid(const gateway_config_t *config);
 bool gateway_config_mqtt_is_valid(const gateway_config_t *config);
+bool gateway_config_ota_is_valid(const gateway_config_t *config);
 uint32_t gateway_config_get_revision(void);
 
 /* Starts the USB Serial/JTAG `cfg` console without exposing generic NVS access. */

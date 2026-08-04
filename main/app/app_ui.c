@@ -14,6 +14,7 @@
 #include "device_manager.h"
 #include "mqtt_service.h"
 #include "network_manager.h"
+#include "ota_manager.h"
 #include "outbox.h"
 #include "storage_manager.h"
 #include "time_service.h"
@@ -123,12 +124,26 @@ static void update_recent_device(const device_manager_ui_event_t *event)
     recent_devices[selected].sequence = ++device_sequence;
 }
 
+static char service_status_mark(const char *status)
+{
+    if (strcmp(status, "Connected") == 0) {
+        return '+';
+    }
+    if (strcmp(status, "Disabled") == 0) {
+        return '-';
+    }
+    if (strcmp(status, "Error") == 0) {
+        return '!';
+    }
+    return '~';
+}
+
 static void update_network_status(void)
 {
-    lv_label_set_text_fmt(network_status_label, "WiFi:%s MQTT:%s OB:%lu/%luK",
-                          network_manager_status_text(), mqtt_service_status_text(),
-                          (unsigned long)gateway_outbox_pending_count(),
-                          (unsigned long)(gateway_outbox_pending_bytes() / 1024U));
+    lv_label_set_text_fmt(network_status_label, "W:%c M:%c OB:%lu OTA:%s",
+                          service_status_mark(network_manager_status_text()),
+                          service_status_mark(mqtt_service_status_text()),
+                          (unsigned long)gateway_outbox_pending_count(), ota_manager_status_text());
 }
 
 static void scanner_toggle_cb(lv_event_t *event)
@@ -245,7 +260,7 @@ void app_ui_start(void)
     lv_obj_align(device_count_label, LV_ALIGN_TOP_MID, 0, 55);
 
     network_status_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(network_status_label, "WiFi:... MQTT:... OB:0/0K");
+    lv_label_set_text(network_status_label, "W:~ M:~ OB:0 OTA:Idle");
     lv_obj_align(network_status_label, LV_ALIGN_TOP_MID, 0, 73);
 
     for (size_t row = 0; row < DEVICE_LIST_VISIBLE_ROWS; ++row) {

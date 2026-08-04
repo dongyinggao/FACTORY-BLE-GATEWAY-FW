@@ -91,11 +91,18 @@ echo "[9/10] 128_device_stress"
     -o "${BUILD_DIR}/stress_128_devices_test"
 "${BUILD_DIR}/stress_128_devices_test"
 
-echo "[10/10] scan_timing_core"
+echo "[10/11] scan_timing_core"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/ble/scan_timing_core.c" \
     "${TEST_DIR}/scan_timing_core_test.c" \
     -o "${BUILD_DIR}/scan_timing_core_test"
 "${BUILD_DIR}/scan_timing_core_test"
+
+echo "[11/11] ota_manifest_core"
+"${CC}" "${COMMON_FLAGS[@]}" \
+    "${PROJECT_DIR}/main/network/ota_manifest_core.c" \
+    "${TEST_DIR}/ota_manifest_core_test.c" \
+    -o "${BUILD_DIR}/ota_manifest_core_test"
+"${BUILD_DIR}/ota_manifest_core_test"
 
 echo "All host tests passed."
