@@ -20,7 +20,8 @@
 #include "storage_manager.h"
 #include "time_service.h"
 
-#define DEVICE_LIST_VISIBLE_ROWS 4
+#define DEVICE_LIST_VISIBLE_ROWS 3
+#define DEVICE_LIST_ROW_HEIGHT 31
 #define APP_UI_MIN_REFRESH_MS 250U
 
 static const char *TAG = "app_ui";
@@ -151,6 +152,8 @@ static const char *ota_status_text(void)
         return "Check";
     case OTA_MANAGER_STATE_READY:
         return "Ready";
+    case OTA_MANAGER_STATE_UP_TO_DATE:
+        return "Current";
     case OTA_MANAGER_STATE_PREPARING:
         return "Prep";
     case OTA_MANAGER_STATE_DOWNLOADING:
@@ -172,6 +175,8 @@ static const char *ota_button_text(void)
     switch (ota_manager_get_state()) {
     case OTA_MANAGER_STATE_READY:
         return "Start update";
+    case OTA_MANAGER_STATE_UP_TO_DATE:
+        return "Check update";
     case OTA_MANAGER_STATE_CHECKING:
         return "Checking...";
     case OTA_MANAGER_STATE_PREPARING:
@@ -218,14 +223,12 @@ static void update_network_status(void)
 
 static void update_firmware_version(void)
 {
-    const char *verification;
+    const char *verification = "";
 
     if (ota_manager_pending_release_sequence() != 0U) {
         verification = "VERIFY";
     } else if (ota_manager_confirmed_release_sequence() != 0U) {
         verification = "OK";
-    } else {
-        verification = "";
     }
     lv_label_set_text_fmt(firmware_version_label, "FW:%s %s", ota_manager_running_version(),
                           verification);
@@ -385,7 +388,8 @@ void app_ui_start(void)
         device_rows[row] = lv_label_create(lv_scr_act());
         lv_label_set_long_mode(device_rows[row], LV_LABEL_LONG_CLIP);
         lv_obj_set_width(device_rows[row], 300);
-        lv_obj_align(device_rows[row], LV_ALIGN_TOP_MID, 0, 97 + (int32_t)(row * 25));
+        lv_obj_align(device_rows[row], LV_ALIGN_TOP_MID, 0,
+                     97 + (int32_t)(row * DEVICE_LIST_ROW_HEIGHT));
     }
     update_device_list();
     update_network_status();

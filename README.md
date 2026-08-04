@@ -11,7 +11,7 @@
 - 128 台设备容量管理；
 - SD 卡 CSV 持久化和断网 Outbox；
 - Wi-Fi STA、SNTP 校时、MQTT QoS 1 上报与 PUBACK 确认；
-- CoreS3-SE LCD 状态显示和触摸启停扫描；
+- CoreS3-SE LCD 状态显示、触摸启停扫描与两步 OTA 操作入口；
 - USB Serial/JTAG `esp_console` 配置并保存到 NVS。
 - 受控 HTTPS OTA：Manifest 检查、SHA-256 校验、双分区切换与启动自检回滚。
 
@@ -26,21 +26,22 @@
 
 Linux 环境安装 ESP-IDF 可参考[官方指南](https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/get-started/linux-setup.html)。
 
-## 获取代码与添加 BSP
+## 获取代码与构建
 
 ```bash
 git clone <repository-url>
 cd BLEGateway
 source /home/sm-dawn/.espressif/v5.5.5/esp-idf/export.sh
-idf.py add-dependency "espressif/m5stack_core_s3^4.0.0"
+idf.py build
 ```
 
-依赖信息保存在 `main/idf_component.yml` 和 `dependencies.lock` 中。
+依赖已锁定在 `main/idf_component.yml` 和 `dependencies.lock` 中；无需重复执行
+`idf.py add-dependency`。
 
 ## 构建、烧录与监视
 
 ```bash
-source /you-idf-path/.espressif/v5.5.5/esp-idf/export.sh
+source /home/sm-dawn/.espressif/v5.5.5/esp-idf/export.sh
 idf.py build
 idf.py -p /dev/ttyACM0 flash monitor
 ```
@@ -59,21 +60,37 @@ cfg set gateway_loc Room101-North
 cfg set bcast_end_s 5
 cfg set wifi_ssid Factory-IoT
 cfg set wifi_password <password>
-cfg set mqtt_uri mqtt://192.168.20.223:1883
+cfg set mqtt_uri mqtt://192.168.20.211:1883
 cfg set mqtt_qos 1
 cfg set ntp_server ntp.aliyun.com
-# 仅接受 HTTPS 地址；示例域名请替换为实际发布服务器
-cfg set ota_manifest_uri https://ota.example.com/ble-gateway/manifest.json
+cfg set timezone CST-8
+cfg set ota_manifest_uri https://ble-gateway-uat.singularmedical.net/ota/manifest.json
 cfg commit
 cfg show
 ```
 
-`bcast_end_s` 范围为 5～300 秒，默认 40 秒；它表示最后一个有效广播包后，
+对全新设备，推荐在未打开串口监视器的情况下使用初始化脚本；脚本不会把 Wi-Fi 密码写入仓库，
+执行时会隐藏输入：
+
+```bash
+./tools/provision_gateway.sh /dev/ttyACM0
+```
+
+默认值为本项目 UAT 网关 `GW-01`、`Room101-North`、5 秒广播结束判定、
+`singularmedical-guest` 与 `mqtt://192.168.20.211:1883`。产线脚本可通过环境变量覆盖，例如
+`GATEWAY_ID=GW-02 GATEWAY_LOCATION=Room102 ./tools/provision_gateway.sh /dev/ttyACM0`。
+完成后用 `cfg show` 复核（密码会隐藏）。
+
+`bcast_end_s` 范围为 5～300 秒，默认 5 秒；它表示最后一个有效广播包后，
 网关等待多久才生成 `BROADCAST_ENDED`。MQTT 主题为：
 
 ```text
 factory/product-status/gateway/<gateway_id>/events
 ```
+
+全新设备、整片 Flash 擦除、首次 NVS 配置和 `1.0.1 → 1.0.2` OTA 验证的逐步操作见
+[OTA 发布制品暂存与 UAT 发布](ota/README.md)。普通 `idf.py build` 的固件版本由根目录
+[`version.txt`](version.txt) 定义，当前基线为 `1.0.1`；正式发布脚本会显式覆盖该版本。
 
 ## HTTPS OTA 维护
 
@@ -86,17 +103,23 @@ HTTPS/MQTT 传输的稳定性，不以省电为目标。
 ota check   # 下载并校验 Manifest，不写入固件
 ota status  # 查看当前状态、可用版本和错误码
 ota start   # 重新检查 Manifest，满足采集保护条件后下载并重启
+ota start --allow-downgrade  # 仅物理串口受控回退，仍执行完整镜像校验
 ```
 
 LCD 底部的 `Check update` 提供同一维护入口：首次触摸只检查 Manifest；成功后按钮变为
 `Start update`，再次触摸才允许进入升级流程。下载、校验和重启期间按钮会禁用。串口命令仍
 用于查看详细错误和执行受控回退。
 
+`release_sequence` 会保存在 NVS，手动 USB 烧录旧固件不会降低已确认序号。LCD 只显示当前
+运行版本 `FW:<版本>`；OTA 确认序号、可用版本和错误原因以 `ota status` 为准。手动重刷旧版本
+后，可通过 `ota start --allow-downgrade` 恢复到已发布镜像，或在确有必要时整片擦除后重新配置。
+
 Manifest 必须通过 HTTPS 提供，并包含 `version`、`image_url`、`image_size` 与镜像
 `sha256`，以及硬件型号、芯片目标、分区布局和递增发布序号。镜像下载到非运行 OTA 分区，
 校验失败不会切换启动分区；首次启动新镜像后，扫描和 SD 存储服务连续运行 10 秒才确认新
-镜像有效，否则由 Bootloader 自动回滚。详细的发布格式、测试步骤与限制见
-[OTA 升级与发布操作说明](doc/OTA升级与发布操作说明.md)。
+镜像有效，否则由 Bootloader 自动回滚。详细的协议、安全边界与回滚规则见
+[OTA 升级与发布操作说明](doc/OTA升级与发布操作说明.md)，实际发布和全新设备操作见
+[ota/README.md](ota/README.md)。
 仓库中的 `ota/` 仅是本地发布制品暂存目录，镜像与 Manifest 不随源代码提交；发布服务器
 是 OTA 文件的唯一受控来源。
 
@@ -111,7 +134,7 @@ factory/product-status/gateway/<gateway_id>/commands/ota
 命令必须使用 `mqtts://` 连接，并携带 HTTPS Manifest、唯一命令 ID 与 Unix 到期时间：
 
 ```json
-{"message_type":"ota_command","command_id":"cmd-20260803-001","campaign_id":"pilot-01","manifest_url":"https://ota.example.com/manifest.json","expires_at_epoch_s":1780000000}
+{"message_type":"ota_command","command_id":"cmd-20260803-001","campaign_id":"pilot-01","manifest_url":"https://ble-gateway-uat.singularmedical.net/ota/manifest.json","expires_at_epoch_s":1780000000}
 ```
 
 网关会以 QoS 1 发布 `accepted`、`waiting_safe_window`、`downloading`、`rebooting` 或
@@ -203,7 +226,8 @@ SD；仅在 MQTT 断开时，SD Outbox 覆盖式保存最新一条心跳，待�
 
 LCD 网络行使用 `WiFi:<状态> MQTT:<状态> Outbox:<数量> OTA:<状态>` 格式。其中 `OK` 为已连接、
 `Wait` 为正在连接或等待、`Off` 为未配置、`Err` 为错误；`Outbox` 是当前待 MQTT 确认的持久化
-消息数量。OTA 仅在用户执行命令时短暂显示 `Check`、`Prep`、`DL`、`Verify` 或 `Boot`，通常为 `Idle`。
+消息数量。OTA 检查发现已是当前版本时显示 `Current`，而不是错误；检查、准备、下载、校验和
+重启时分别显示 `Check`、`Prep`、`DL`、`Verify`、`Boot`，通常为 `Idle`。
 
 例如：
 
@@ -248,8 +272,11 @@ main/config/           NVS 与 USB 串口配置
 main/network/          Wi-Fi、SNTP、MQTT 和发布器
 tests/                 主机侧单元测试
 partitions/v1/16m.csv  16 MB Flash 分区表
-doc/                   方案、开发计划、会议纪要和模块设计文档
+doc/                   方案、架构、扫描说明、会议纪要和 OTA 设计文档
+ota/                   本地 OTA 制品暂存与 UAT 操作说明（制品不提交 Git）
+tools/                 构建、Manifest 生成与 UAT 发布脚本
 sdkconfig.defaults     配置默认值
+version.txt             普通构建的固件基线版本
 ```
 
 主要模块：`ble_scanner`（扫描）、`device_filter`（名称过滤）、
@@ -260,14 +287,16 @@ sdkconfig.defaults     配置默认值
 ## 相关文档
 
 - [厂内产品状态监控蓝牙网关方案](doc/厂内产品状态监控蓝牙网关方案.md)
-- [项目进展与模块化设计](doc/项目进展与模块化设计.md)
-- [BLE 扫描框架开发计划](doc/BLE 扫描框架开发计划.md)
+- [嵌入式网关架构](doc/嵌入式网关架构.md)
+- [BLE 扫描与设备生命周期管理说明](doc/BLE扫描与设备生命周期管理说明.md)
+- [OTA 升级与发布操作说明](doc/OTA升级与发布操作说明.md)
+- [OTA 发布制品暂存与 UAT 发布](ota/README.md)
 - [厂内产品状态监控蓝牙网关方案评审会议纪要](doc/厂内产品状态监控蓝牙网关方案评审会议纪要.md)
 - [M5Stack CoreS3 BSP 文档](https://docs.m5stack.com/zh_CN/esp_idf/m5cores3/bsp)
 - [ESP-IDF 编程指南](https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/)
 
 ## 当前限制
 
-MQTT TLS 证书校验、云端下行控制、OTA Manifest 签名/灰度平台和多网关协同尚未纳入当前
-固件交付范围。现场交付前仍需完成 128 台设备并发广播、断网 Outbox 重传、OTA 中断回滚和
-长时间运行验证。
+基础 HTTPS OTA、单网关 MQTT OTA 命令、断网 Outbox 重传和运行诊断已实现。MQTT TLS 证书
+校验、OTA Manifest 签名、批量灰度编排、远程配置下发和多网关业务融合仍不属于当前交付范围。
+交付前仍需完成 128 台设备并发广播、断网/SD 异常、OTA 中断回滚和长时间运行验证。

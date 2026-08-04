@@ -4,7 +4,7 @@
 
 ## 1. 持续扫描模型
 
-NimBLE 主机同步完成后，`main/ble/ble_scanner.c` 的 `scanner_on_sync()` 调用 `scanner_start_continuous()`。扫描使用主动模式和 `BLE_HS_FOREVER`，在用户停止、NimBLE Host 复位或异常结束前持续运行。扫描间隔和窗口参数为 `0`，NimBLE 默认使用 30 ms 间隔和 30 ms 窗口，即连续监听。
+NimBLE 主机同步完成后，`main/ble/ble_scanner.c` 的 `scanner_on_sync()` 调用 `scanner_start_continuous()`。扫描使用主动模式和 `BLE_HS_FOREVER`，在用户停止、NimBLE Host 复位或异常结束前持续运行。扫描间隔和窗口参数均设为 `0`，交由当前 ESP-IDF/NimBLE 使用控制器默认值；设计目标是持续监听，而不是应用侧的 5 秒扫描会话循环。
 
 当前 ESP-IDF 5.5.5 的 Observer-only 配置不会可靠地对有限扫描时长触发 `BLE_GAP_EVENT_DISC_COMPLETE`，因此正式版本不再以该事件作为正常扫描循环机制。若持续扫描意外结束，`scanner_gap_event()` 会记录警告，并在扫描开关仍启用时尝试恢复扫描。
 
