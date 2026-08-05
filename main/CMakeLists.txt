@@ -21,6 +21,7 @@ idf_component_register(SRCS
                        "network/mqtt_service.c"
                        "network/network_manager.c"
                        "network/time_service.c"
+                       "network/time_service_core.c"
                        "network/ota_manifest_core.c"
                        "network/ota_manager.c"
                        "network/ota_command_core.c"
