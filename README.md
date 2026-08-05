@@ -60,10 +60,9 @@ cfg set gateway_loc Room101-North
 cfg set bcast_end_s 5
 cfg set wifi_ssid Factory-IoT
 cfg set wifi_password <password>
-cfg set mqtt_uri mqtt://192.168.20.211:1883
+cfg set mqtt_uri mqtt://192.168.19.21:1883
 cfg set mqtt_qos 1
 cfg set ntp_server ntp.aliyun.com
-cfg set timezone CST-8
 cfg set ota_manifest_uri https://ble-gateway-uat.singularmedical.net/ota/manifest.json
 cfg commit
 cfg show
@@ -117,11 +116,10 @@ LCD 底部的 `Check update` 提供同一维护入口：首次触摸只检查 Ma
 Manifest 必须通过 HTTPS 提供，并包含 `version`、`image_url`、`image_size` 与镜像
 `sha256`，以及硬件型号、芯片目标、分区布局和递增发布序号。镜像下载到非运行 OTA 分区，
 校验失败不会切换启动分区；首次启动新镜像后，扫描和 SD 存储服务连续运行 10 秒才确认新
-镜像有效，否则由 Bootloader 自动回滚。详细的协议、安全边界与回滚规则见
-[OTA 升级与发布操作说明](doc/OTA升级与发布操作说明.md)，实际发布和全新设备操作见
-[ota/README.md](ota/README.md)。
-仓库中的 `ota/` 仅是本地发布制品暂存目录，镜像与 Manifest 不随源代码提交；发布服务器
-是 OTA 文件的唯一受控来源。
+镜像有效，否则由 Bootloader 自动回滚。详细的发布格式、测试步骤与限制见
+[OTA 升级与发布操作说明](doc/OTA升级与发布操作说明.md)。
+服务器 MQTT 与 OTA 服务的部署、验证和运维命令见
+[服务器 MQTT 与 OTA 环境部署操作手册](doc/服务器MQTT与OTA环境部署操作手册.md)。
 
 ### MQTT OTA 命令（第一阶段）
 
