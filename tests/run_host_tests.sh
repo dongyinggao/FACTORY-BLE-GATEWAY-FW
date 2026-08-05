@@ -21,28 +21,28 @@ COMMON_FLAGS=(
     -I "${PROJECT_DIR}/main/network"
 )
 
-echo "[1/12] device_filter"
+echo "[1/13] device_filter"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/ble/device_filter.c" \
     "${TEST_DIR}/device_filter_test.c" \
     -o "${BUILD_DIR}/device_filter_test"
 "${BUILD_DIR}/device_filter_test"
 
-echo "[2/12] device_manager_core"
+echo "[2/13] device_manager_core"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/device/device_manager_core.c" \
     "${TEST_DIR}/device_manager_test.c" \
     -o "${BUILD_DIR}/device_manager_test"
 "${BUILD_DIR}/device_manager_test"
 
-echo "[3/12] device_list_model"
+echo "[3/13] device_list_model"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/device/device_list_model.c" \
     "${TEST_DIR}/device_list_model_test.c" \
     -o "${BUILD_DIR}/device_list_model_test"
 "${BUILD_DIR}/device_list_model_test"
 
-echo "[4/12] csv_formatter"
+echo "[4/13] csv_formatter"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/storage/csv_formatter.c" \
     "${TEST_DIR}/time_service_stub.c" \
@@ -50,35 +50,35 @@ echo "[4/12] csv_formatter"
     -o "${BUILD_DIR}/csv_formatter_test"
 "${BUILD_DIR}/csv_formatter_test"
 
-echo "[5/12] event_json"
+echo "[5/13] event_json"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/network/event_json.c" \
     "${TEST_DIR}/event_json_test.c" \
     -o "${BUILD_DIR}/event_json_test"
 "${BUILD_DIR}/event_json_test"
 
-echo "[6/12] outbox_core"
+echo "[6/13] outbox_core"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/storage/outbox_core.c" \
     "${TEST_DIR}/outbox_core_test.c" \
     -o "${BUILD_DIR}/outbox_core_test"
 "${BUILD_DIR}/outbox_core_test"
 
-echo "[7/12] publisher_ack"
+echo "[7/13] publisher_ack"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/network/publisher_ack.c" \
     "${TEST_DIR}/publisher_ack_test.c" \
     -o "${BUILD_DIR}/publisher_ack_test"
 "${BUILD_DIR}/publisher_ack_test"
 
-echo "[8/12] storage_state_core"
+echo "[8/13] storage_state_core"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/storage/storage_state_core.c" \
     "${TEST_DIR}/storage_state_core_test.c" \
     -o "${BUILD_DIR}/storage_state_core_test"
 "${BUILD_DIR}/storage_state_core_test"
 
-echo "[9/12] 128_device_stress"
+echo "[9/13] 128_device_stress"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/ble/device_filter.c" \
     "${PROJECT_DIR}/main/device/device_manager_core.c" \
@@ -91,21 +91,28 @@ echo "[9/12] 128_device_stress"
     -o "${BUILD_DIR}/stress_128_devices_test"
 "${BUILD_DIR}/stress_128_devices_test"
 
-echo "[10/12] scan_timing_core"
+echo "[10/13] scan_timing_core"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/ble/scan_timing_core.c" \
     "${TEST_DIR}/scan_timing_core_test.c" \
     -o "${BUILD_DIR}/scan_timing_core_test"
 "${BUILD_DIR}/scan_timing_core_test"
 
-echo "[11/12] ota_manifest_core"
+echo "[11/13] time_service_core"
+"${CC}" "${COMMON_FLAGS[@]}" \
+    "${PROJECT_DIR}/main/network/time_service_core.c" \
+    "${TEST_DIR}/time_service_core_test.c" \
+    -o "${BUILD_DIR}/time_service_core_test"
+"${BUILD_DIR}/time_service_core_test"
+
+echo "[12/13] ota_manifest_core"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/network/ota_manifest_core.c" \
     "${TEST_DIR}/ota_manifest_core_test.c" \
     -o "${BUILD_DIR}/ota_manifest_core_test"
 "${BUILD_DIR}/ota_manifest_core_test"
 
-echo "[12/12] ota_command_core"
+echo "[13/13] ota_command_core"
 "${CC}" "${COMMON_FLAGS[@]}" \
     "${PROJECT_DIR}/main/network/ota_command_core.c" \
     "${TEST_DIR}/ota_command_core_test.c" \

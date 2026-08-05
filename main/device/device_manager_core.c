@@ -31,7 +31,7 @@ static int registry_find_empty_slot(const device_registry_t *registry)
 device_registry_result_t device_registry_process_report(device_registry_t *registry,
                                                         const ble_scan_report_t *report,
                                                         uint32_t now_ms,
-                                                        uint32_t wall_ms,
+                                                        uint64_t wall_ms,
                                                         size_t *device_index)
 {
     int index = registry_find_device(registry, report);
@@ -73,7 +73,7 @@ device_registry_result_t device_registry_process_report(device_registry_t *regis
 
 device_registry_result_t device_registry_mark_next_broadcast_ended(device_registry_t *registry,
                                                                     uint32_t now_ms,
-                                                                    uint32_t wall_ms,
+                                                                    uint64_t wall_ms,
                                                                     uint32_t timeout_ms,
                                                                     size_t *device_index)
 {

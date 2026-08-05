@@ -36,6 +36,13 @@ static uint32_t manager_now_ms(void)
     return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 }
 
+/* Absolute-time formatting uses esp_timer in time_service. Keep lifecycle
+ * wall timestamps on that same clock; application uptime remains tick-based. */
+static uint64_t manager_wall_timebase_ms(void)
+{
+    return (uint64_t)(esp_timer_get_time() / 1000LL);
+}
+
 static uint16_t manager_device_count(bool broadcasting_only)
 {
     uint16_t count = 0;
@@ -148,7 +155,7 @@ static void manager_handle_scanner_state(const ble_scanner_event_t *scanner_even
     manager_publish_scanner_state(scanner_event);
 }
 
-static void manager_process_report(const ble_scan_report_t *report, uint32_t wall_ms)
+static void manager_process_report(const ble_scan_report_t *report, uint64_t wall_ms)
 {
     size_t index;
     device_registry_result_t result = device_registry_process_report(&registry,
@@ -181,13 +188,13 @@ static void manager_process_report(const ble_scan_report_t *report, uint32_t wal
     }
 }
 
-static void manager_mark_ended_broadcasts(void)
+static void manager_mark_ended_broadcasts(uint64_t wall_ms)
 {
     size_t index;
 
     while (device_registry_mark_next_broadcast_ended(&registry,
                                                        device_observation_clock_now(&observation_clock),
-                                                       manager_now_ms(),
+                                                       wall_ms,
                                                        gateway_config_get()->broadcast_end_ms,
                                                        &index) == DEVICE_REGISTRY_BROADCAST_ENDED) {
         ESP_LOGI(TAG, "broadcast ended: %s", registry.devices[index].report.name);
@@ -204,15 +211,17 @@ static void device_manager_task(void *parameter)
     (void)parameter;
     while (true) {
         BaseType_t received;
-        uint32_t wall_ms;
+        uint32_t now_ms;
+        uint64_t wall_ms;
 
         received = xQueueReceive(scanner_queue, &scanner_event, pdMS_TO_TICKS(1000));
-        wall_ms = manager_now_ms();
-        device_observation_clock_tick(&observation_clock, wall_ms);
+        now_ms = manager_now_ms();
+        wall_ms = manager_wall_timebase_ms();
+        device_observation_clock_tick(&observation_clock, now_ms);
 
         if (received == pdTRUE) {
             if (scanner_event.type == BLE_SCANNER_EVENT_STATE) {
-                manager_handle_scanner_state(&scanner_event, wall_ms);
+                manager_handle_scanner_state(&scanner_event, now_ms);
             } else if (scanner_event.type == BLE_SCANNER_EVENT_REPORT) {
                 int64_t queue_wait_us = esp_timer_get_time() - scanner_event.enqueued_at_us;
                 ble_scanner_record_report_queue_wait_us(queue_wait_us > UINT32_MAX ?
@@ -220,7 +229,7 @@ static void device_manager_task(void *parameter)
                 manager_process_report(&scanner_event.report, wall_ms);
             }
         }
-        manager_mark_ended_broadcasts();
+        manager_mark_ended_broadcasts(wall_ms);
     }
 }
 

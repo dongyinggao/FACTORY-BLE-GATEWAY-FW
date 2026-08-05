@@ -20,7 +20,7 @@ typedef struct {
     uint32_t broadcast_started_ms;
     uint32_t last_seen_ms;
     uint32_t end_detected_ms;
-    uint32_t broadcast_started_wall_ms;
-    uint32_t last_seen_wall_ms;
-    uint32_t end_detected_wall_ms;
+    uint64_t broadcast_started_wall_ms;
+    uint64_t last_seen_wall_ms;
+    uint64_t end_detected_wall_ms;
 } device_lifecycle_event_t;
