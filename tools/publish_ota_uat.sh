@@ -73,15 +73,36 @@ echo "[1/5] Building release ${release_version} (sequence ${release_sequence})"
 
 echo "[2/5] Staging local release artifacts"
 install -m 0644 "build/release/ble_gateway.bin" "ota/${image_name}"
+cat > "ota/index.html" <<EOF
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Factory BLE Gateway OTA</title>
+</head>
+<body>
+  <h1>Factory BLE Gateway OTA Release</h1>
+  <p>当前发布版本：${release_version}（序列号 ${release_sequence}）</p>
+  <ul>
+    <li><a href="manifest.json">当前 Manifest（${release_version}）</a></li>
+    <li><a href="${manifest_name}">版本 Manifest（${release_version}）</a></li>
+    <li><a href="${image_name}">固件镜像（${release_version}）</a></li>
+  </ul>
+  <p>仅存放已发布的固件和 Manifest，不上传配置、日志或凭据。</p>
+</body>
+</html>
+EOF
 
 echo "[3/5] Uploading versioned image and Manifest to ${ota_ssh_target}"
 ssh "$ota_ssh_target" "set -eu; rm -rf '${remote_tmp}'; mkdir -p '${remote_tmp}'"
-scp "ota/${image_name}" "ota/${manifest_name}" "${ota_ssh_target}:${remote_tmp}/"
+scp "ota/${image_name}" "ota/${manifest_name}" "ota/index.html" "${ota_ssh_target}:${remote_tmp}/"
 
 echo "[4/5] Publishing versioned files and activating manifest.json"
 ssh "$ota_ssh_target" "set -eu
     sudo install -o ble_gateway -g www-data -m 0640 '${remote_tmp}/${image_name}' '${ota_remote_dir}/${image_name}'
     sudo install -o ble_gateway -g www-data -m 0640 '${remote_tmp}/${manifest_name}' '${ota_remote_dir}/${manifest_name}'
+    sudo install -o ble_gateway -g www-data -m 0640 '${remote_tmp}/index.html' '${ota_remote_dir}/index.html'
     sudo install -o ble_gateway -g www-data -m 0640 '${remote_tmp}/${manifest_name}' '${ota_remote_dir}/manifest.json'
     rm -rf '${remote_tmp}'
     sha256sum '${ota_remote_dir}/${image_name}'
