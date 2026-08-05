@@ -77,7 +77,7 @@ factory/product-status/gateway/<gateway_id>/events
 
 ## HTTPS OTA 维护
 
-OTA 仅由串口命令显式触发，不会通过 MQTT 自动升级。升级前必须满足 Wi-Fi 已连接、SNTP
+OTA 可由串口维护命令，或由网关专属 MQTT 指令触发。升级前必须满足 Wi-Fi 已连接、SNTP
 已同步、SD 卡可写且没有正在进行的设备广播；网关会先停止扫描并等待现有采集/上传队列排空。
 
 ```text
@@ -91,6 +91,30 @@ Manifest 必须通过 HTTPS 提供，并包含 `version`、`image_url`、`image_
 校验失败不会切换启动分区；首次启动新镜像后，扫描和 SD 存储服务连续运行 10 秒才确认新
 镜像有效，否则由 Bootloader 自动回滚。详细的发布格式、测试步骤与限制见
 [OTA 升级与发布操作说明](doc/OTA升级与发布操作说明.md)。
+
+### MQTT OTA 命令（第一阶段）
+
+网关只订阅自身的命令 Topic，避免广播式指令误升级其他设备：
+
+```text
+factory/product-status/gateway/<gateway_id>/commands/ota
+```
+
+命令必须使用 `mqtts://` 连接，并携带 HTTPS Manifest、唯一命令 ID 与 Unix 到期时间：
+
+```json
+{"message_type":"ota_command","command_id":"cmd-20260803-001","campaign_id":"pilot-01","manifest_url":"https://ota.example.com/manifest.json","expires_at_epoch_s":1780000000}
+```
+
+网关会以 QoS 1 发布 `accepted`、`waiting_safe_window`、`downloading`、`rebooting` 或
+`failed` 等状态到：
+
+```text
+factory/product-status/gateway/<gateway_id>/ota/status
+```
+
+命令 ID 会保存到 NVS，用于抑制重复投递；同一条远程命令不能允许降级。该阶段没有批量活动
+管理、签名验证或持久化状态回传，量产前仍需补齐服务端鉴权与 Manifest 签名。
 
 ## 运行诊断命令
 

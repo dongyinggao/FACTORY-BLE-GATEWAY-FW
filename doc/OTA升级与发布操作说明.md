@@ -2,13 +2,35 @@
 
 ## 范围与安全边界
 
-本项目采用 ESP-IDF 双 OTA 分区。只有通过 USB Serial/JTAG 串口输入命令时才会执行升级；
-MQTT 不具备 OTA 触发能力。Manifest 和固件均要求 HTTPS，使用 ESP-IDF 内置根证书包验证
-服务器证书；下载后的镜像还必须匹配 Manifest 中的 SHA-256。
+本项目采用 ESP-IDF 双 OTA 分区。维护人员可通过 USB Serial/JTAG 串口命令升级；第一阶段
+也支持网关专属 MQTT 命令触发，命令必须来自 `mqtts://` 连接。Manifest 和固件均要求 HTTPS，
+使用 ESP-IDF 内置根证书包验证服务器证书；下载后的镜像还必须匹配 Manifest 中的 SHA-256。
 
-当前版本尚未实现 Manifest 数字签名、远程升级任务、灰度发布或 SD 卡离线升级。发布服务器
-的 HTTPS 证书、发布权限和 SHA-256 值必须由发布负责人复核。当前使用公共 CA 证书包；厂内
-OTA 服务稳定后，应评审是否改为固化厂内 CA 根证书。
+当前版本尚未实现 Manifest 数字签名、批量活动编排、灰度发布或 SD 卡离线升级。发布服务器
+的 HTTPS 证书、MQTT 命令发布权限和 SHA-256 值必须由发布负责人复核。当前使用公共 CA
+证书包；厂内 OTA 服务稳定后，应评审是否改为固化厂内 CA 根证书。
+
+## MQTT 远程命令（第一阶段）
+
+网关只订阅自身的命令 Topic：
+
+```text
+factory/product-status/gateway/<gateway_id>/commands/ota
+```
+
+命令以 QoS 1 发布，JSON 必须包含：
+
+```json
+{"message_type":"ota_command","command_id":"cmd-20260803-001","campaign_id":"pilot-01","manifest_url":"https://ota.example.com/manifest.json","expires_at_epoch_s":1780000000}
+```
+
+`command_id` 和 `campaign_id` 仅可使用字母、数字、`-`、`_`、`.`、`:`；网关在 SNTP 已同步后
+校验到期时间，并把最近成功接收的 `command_id` 保存到 NVS，重复投递不会再次升级。`mqtts://`
+连接使用 ESP-IDF 证书包校验 Broker 的服务器证书；开发用明文 Mosquitto 只能验证常规事件上报，
+不能用于远程 OTA 命令。命令状态
+以 QoS 1 发送到 `factory/product-status/gateway/<gateway_id>/ota/status`。远程请求最多等待
+15 分钟无广播窗口，之后执行与串口 `ota start` 相同的镜像校验、切换与回滚流程；不允许远程
+降级。状态消息首期不进入 SD Outbox，服务端应按 `command_id` 保存活动状态并在超时后告警。
 
 ## 发布文件
 

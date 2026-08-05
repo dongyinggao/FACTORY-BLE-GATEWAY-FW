@@ -29,6 +29,7 @@
 #define OTA_MANIFEST_MAX_LEN 768U
 #define OTA_DOWNLOAD_BUFFER_SIZE 4096U
 #define OTA_PREPARE_TIMEOUT_MS 5000U
+#define OTA_REMOTE_SAFE_WINDOW_TIMEOUT_MS (15U * 60U * 1000U)
 #define OTA_BOOT_CONFIRM_DELAY_MS 10000U
 #define OTA_RELEASE_NVS_NAMESPACE "ota_release"
 #define OTA_RELEASE_NVS_CONFIRMED "confirmed_seq"
@@ -45,6 +46,8 @@ typedef enum {
 
 typedef struct {
     ota_request_type_t type;
+    bool use_remote_manifest;
+    char manifest_uri[GATEWAY_OTA_MANIFEST_URI_MAX_LEN];
 } ota_request_t;
 
 typedef struct {
@@ -62,6 +65,8 @@ static uint32_t ota_downloaded;
 static uint32_t ota_confirmed_sequence;
 static uint32_t ota_pending_sequence;
 static char ota_pending_version[OTA_MANIFEST_VERSION_MAX_LEN];
+static ota_manager_state_callback_t ota_state_callback;
+static void *ota_state_callback_context;
 
 static void ota_release_policy_load(void)
 {
@@ -155,6 +160,9 @@ static void ota_set_state(ota_manager_state_t state, int error)
     ota_state = state;
     ota_error = error;
     device_manager_request_ui_status_refresh();
+    if (ota_state_callback != NULL) {
+        ota_state_callback(state, error, ota_state_callback_context);
+    }
 }
 
 static esp_err_t ota_manifest_http_event(esp_http_client_event_t *event)
@@ -174,7 +182,7 @@ static esp_err_t ota_manifest_http_event(esp_http_client_event_t *event)
     return ESP_OK;
 }
 
-static esp_err_t ota_fetch_manifest(ota_manifest_t *manifest)
+static esp_err_t ota_fetch_manifest(const char *manifest_uri, ota_manifest_t *manifest)
 {
     char response_buffer[OTA_MANIFEST_MAX_LEN] = {0};
     ota_manifest_response_t response = {
@@ -182,7 +190,7 @@ static esp_err_t ota_fetch_manifest(ota_manifest_t *manifest)
         .capacity = sizeof(response_buffer),
     };
     esp_http_client_config_t http_config = {
-        .url = gateway_config_get()->ota_manifest_uri,
+        .url = manifest_uri,
         .timeout_ms = 10000,
         .buffer_size = 1024,
         .buffer_size_tx = 512,
@@ -194,7 +202,7 @@ static esp_err_t ota_fetch_manifest(ota_manifest_t *manifest)
     esp_http_client_handle_t client;
     esp_err_t result;
 
-    if (!gateway_config_ota_is_valid(gateway_config_get())) {
+    if (!ota_manifest_is_https_url(manifest_uri)) {
         return ESP_ERR_INVALID_ARG;
     }
     client = esp_http_client_init(&http_config);
@@ -210,20 +218,34 @@ static esp_err_t ota_fetch_manifest(ota_manifest_t *manifest)
     return result;
 }
 
-static esp_err_t ota_wait_for_capture_protection(void)
+static esp_err_t ota_wait_for_capture_protection(bool wait_for_broadcast_end)
 {
-    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(OTA_PREPARE_TIMEOUT_MS);
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(wait_for_broadcast_end ?
+                                                               OTA_REMOTE_SAFE_WINDOW_TIMEOUT_MS :
+                                                               OTA_PREPARE_TIMEOUT_MS);
 
     if (!network_manager_is_connected() || !time_service_is_synced() ||
         !storage_manager_is_ready() || storage_manager_is_full()) {
         ESP_LOGW(TAG, "OTA requires connected Wi-Fi, synchronized time, and writable SD storage");
         return ESP_ERR_INVALID_STATE;
     }
-    if (device_manager_broadcasting_count() != 0U) {
-        return ESP_ERR_INVALID_STATE;
+    while (device_manager_broadcasting_count() != 0U) {
+        if (!wait_for_broadcast_end) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        if ((int32_t)(xTaskGetTickCount() - deadline) >= 0) {
+            ESP_LOGW(TAG, "OTA safe-window wait timed out with active broadcasts");
+            return ESP_ERR_TIMEOUT;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        if (!network_manager_is_connected() || !time_service_is_synced() ||
+            !storage_manager_is_ready() || storage_manager_is_full()) {
+            return ESP_ERR_INVALID_STATE;
+        }
     }
 
     ble_scanner_stop();
+    deadline = xTaskGetTickCount() + pdMS_TO_TICKS(OTA_PREPARE_TIMEOUT_MS);
     while (ble_scanner_get_state() != BLE_SCANNER_STATE_IDLE ||
            device_manager_capture_queue_depth() != 0U || device_manager_upload_queue_depth() != 0U) {
         if ((int32_t)(xTaskGetTickCount() - deadline) >= 0) {
@@ -338,14 +360,15 @@ cleanup:
     return result;
 }
 
-static void ota_process_check(bool start_update, bool allow_downgrade)
+static void ota_process_check(bool start_update, bool allow_downgrade, const char *manifest_uri,
+                              bool wait_for_broadcast_end)
 {
     esp_err_t result;
     ota_manifest_t manifest;
     const esp_app_desc_t *running = esp_app_get_description();
 
     ota_set_state(OTA_MANAGER_STATE_CHECKING, ESP_OK);
-    result = ota_fetch_manifest(&manifest);
+    result = ota_fetch_manifest(manifest_uri, &manifest);
     if (result != ESP_OK) {
         ESP_LOGE(TAG, "manifest request failed: %s", esp_err_to_name(result));
         ota_set_state(OTA_MANAGER_STATE_ERROR, result);
@@ -376,7 +399,7 @@ static void ota_process_check(bool start_update, bool allow_downgrade)
         return;
     }
     ota_set_state(OTA_MANAGER_STATE_PREPARING, ESP_OK);
-    result = ota_wait_for_capture_protection();
+    result = ota_wait_for_capture_protection(wait_for_broadcast_end);
     if (result == ESP_OK) {
         result = ota_download_and_stage(&manifest);
     }
@@ -400,26 +423,52 @@ static void ota_manager_task(void *parameter)
     while (true) {
         if (xQueueReceive(ota_request_queue, &request, portMAX_DELAY) == pdTRUE) {
             ota_process_check(request.type != OTA_REQUEST_CHECK,
-                              request.type == OTA_REQUEST_START_ALLOW_DOWNGRADE);
+                              request.type == OTA_REQUEST_START_ALLOW_DOWNGRADE,
+                              request.use_remote_manifest ? request.manifest_uri :
+                                                            gateway_config_get()->ota_manifest_uri,
+                              request.use_remote_manifest);
         }
     }
+}
+
+static bool ota_request_submit(const ota_request_t *request)
+{
+    if (ota_request_queue == NULL || uxQueueMessagesWaiting(ota_request_queue) != 0U ||
+        ota_state == OTA_MANAGER_STATE_CHECKING ||
+        ota_state == OTA_MANAGER_STATE_PREPARING || ota_state == OTA_MANAGER_STATE_DOWNLOADING ||
+        ota_state == OTA_MANAGER_STATE_VERIFYING || ota_state == OTA_MANAGER_STATE_REBOOTING) {
+        return false;
+    }
+    return xQueueSend(ota_request_queue, request, 0) == pdTRUE;
 }
 
 static bool ota_request(ota_request_type_t type)
 {
     const ota_request_t request = {.type = type};
 
-    if (ota_request_queue == NULL || ota_state == OTA_MANAGER_STATE_CHECKING ||
-        ota_state == OTA_MANAGER_STATE_PREPARING || ota_state == OTA_MANAGER_STATE_DOWNLOADING ||
-        ota_state == OTA_MANAGER_STATE_VERIFYING || ota_state == OTA_MANAGER_STATE_REBOOTING) {
-        return false;
-    }
-    return xQueueSend(ota_request_queue, &request, 0) == pdTRUE;
+    return ota_request_submit(&request);
 }
 
 bool ota_manager_request_check(void) { return ota_request(OTA_REQUEST_CHECK); }
 bool ota_manager_request_start(void) { return ota_request(OTA_REQUEST_START); }
+bool ota_manager_request_remote_start(const char *manifest_uri)
+{
+    ota_request_t request = {.type = OTA_REQUEST_START, .use_remote_manifest = true};
+
+    if (!ota_manifest_is_https_url(manifest_uri) ||
+        strlen(manifest_uri) >= sizeof(request.manifest_uri)) {
+        return false;
+    }
+    snprintf(request.manifest_uri, sizeof(request.manifest_uri), "%s", manifest_uri);
+    return ota_request_submit(&request);
+}
+void ota_manager_set_state_callback(ota_manager_state_callback_t callback, void *context)
+{
+    ota_state_callback = callback;
+    ota_state_callback_context = context;
+}
 ota_manager_state_t ota_manager_get_state(void) { return ota_state; }
+const char *ota_manager_running_version(void) { return esp_app_get_description()->version; }
 const char *ota_manager_available_version(void) { return ota_manifest.version[0] ? ota_manifest.version : "<unknown>"; }
 int ota_manager_last_error(void) { return ota_error; }
 uint32_t ota_manager_downloaded_bytes(void) { return ota_downloaded; }

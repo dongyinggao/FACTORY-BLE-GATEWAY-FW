@@ -9,6 +9,7 @@
 #include "mqtt_service.h"
 #include "network_manager.h"
 #include "ota_manager.h"
+#include "ota_command.h"
 #include "storage_manager.h"
 #include "stress_console.h"
 #include "gateway_status_console.h"
@@ -40,5 +41,6 @@ void app_main(void)
     mqtt_service_start();
     gateway_publisher_start();
     ota_manager_start();
+    ota_command_start();
     ota_manager_confirm_running_app();
 }

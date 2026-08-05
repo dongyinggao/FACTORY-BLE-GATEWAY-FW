@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "version": "1.0.1",
+  "release_sequence": 101,
+  "hardware_model": "m5stack-cores3-se",
+  "idf_target": "esp32s3",
+  "partition_layout": "ble-gateway-16m-v1",
+  "image_url": "https://dongyinggao.github.io/FACTORY-BLE-GATEWAY-FW/ota/ble_gateway-1.0.1.bin",
+  "image_size": 1614384,
+  "sha256": "c6d7e07dbda4cc5b121926f7b3ac715a38ec963c7b0cc3b89e0a55c6f71bb430"
+}
