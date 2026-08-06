@@ -79,6 +79,8 @@ factory/product-status/gateway/<gateway_id>/events
 
 OTA 可由串口维护命令，或由网关专属 MQTT 指令触发。升级前必须满足 Wi-Fi 已连接、SNTP
 已同步、SD 卡可写且没有正在进行的设备广播；网关会先停止扫描并等待现有采集/上传队列排空。
+网关为外部供电设备，Wi-Fi 在初始化后始终使用 `WIFI_PS_NONE`，优先保障 BLE 采集和
+HTTPS/MQTT 传输的稳定性，不以省电为目标。
 
 ```text
 ota check   # 下载并校验 Manifest，不写入固件
@@ -91,6 +93,8 @@ Manifest 必须通过 HTTPS 提供，并包含 `version`、`image_url`、`image_
 校验失败不会切换启动分区；首次启动新镜像后，扫描和 SD 存储服务连续运行 10 秒才确认新
 镜像有效，否则由 Bootloader 自动回滚。详细的发布格式、测试步骤与限制见
 [OTA 升级与发布操作说明](doc/OTA升级与发布操作说明.md)。
+仓库中的 `ota/` 仅是本地发布制品暂存目录，镜像与 Manifest 不随源代码提交；发布服务器
+是 OTA 文件的唯一受控来源。
 
 ### MQTT OTA 命令（第一阶段）
 
