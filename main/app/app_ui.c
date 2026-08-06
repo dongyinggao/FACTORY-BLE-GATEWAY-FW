@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 
 #include "bsp/m5stack_core_s3.h"
+#include "esp_log.h"
 #include "lvgl.h"
 
 #include "ble_scanner.h"
@@ -19,8 +20,11 @@
 #include "storage_manager.h"
 #include "time_service.h"
 
-#define DEVICE_LIST_VISIBLE_ROWS 4
+#define DEVICE_LIST_VISIBLE_ROWS 3
+#define DEVICE_LIST_ROW_HEIGHT 31
 #define APP_UI_MIN_REFRESH_MS 250U
+
+static const char *TAG = "app_ui";
 
 static lv_obj_t *scanner_status_label;
 static lv_obj_t *firmware_version_label;
@@ -28,6 +32,8 @@ static lv_obj_t *device_count_label;
 static lv_obj_t *network_status_label;
 static lv_obj_t *device_rows[DEVICE_LIST_VISIBLE_ROWS];
 static lv_obj_t *toggle_label;
+static lv_obj_t *ota_action_button;
+static lv_obj_t *ota_action_label;
 typedef struct {
     char name[BLE_DEVICE_NAME_MAX_LEN];
     uint8_t address[6];
@@ -146,6 +152,8 @@ static const char *ota_status_text(void)
         return "Check";
     case OTA_MANAGER_STATE_READY:
         return "Ready";
+    case OTA_MANAGER_STATE_UP_TO_DATE:
+        return "Current";
     case OTA_MANAGER_STATE_PREPARING:
         return "Prep";
     case OTA_MANAGER_STATE_DOWNLOADING:
@@ -160,6 +168,40 @@ static const char *ota_status_text(void)
     default:
         return "Idle";
     }
+}
+
+static const char *ota_button_text(void)
+{
+    switch (ota_manager_get_state()) {
+    case OTA_MANAGER_STATE_READY:
+        return "Start update";
+    case OTA_MANAGER_STATE_UP_TO_DATE:
+        return "Check update";
+    case OTA_MANAGER_STATE_CHECKING:
+        return "Checking...";
+    case OTA_MANAGER_STATE_PREPARING:
+        return "Preparing...";
+    case OTA_MANAGER_STATE_DOWNLOADING:
+        return "Updating...";
+    case OTA_MANAGER_STATE_VERIFYING:
+        return "Verifying...";
+    case OTA_MANAGER_STATE_REBOOTING:
+        return "Rebooting...";
+    case OTA_MANAGER_STATE_ERROR:
+        return "Retry check";
+    case OTA_MANAGER_STATE_IDLE:
+    default:
+        return "Check update";
+    }
+}
+
+static bool ota_button_is_busy(void)
+{
+    ota_manager_state_t state = ota_manager_get_state();
+
+    return state == OTA_MANAGER_STATE_CHECKING || state == OTA_MANAGER_STATE_PREPARING ||
+           state == OTA_MANAGER_STATE_DOWNLOADING || state == OTA_MANAGER_STATE_VERIFYING ||
+           state == OTA_MANAGER_STATE_REBOOTING;
 }
 
 static void update_network_status(void)
@@ -181,14 +223,12 @@ static void update_network_status(void)
 
 static void update_firmware_version(void)
 {
-    const char *verification;
+    const char *verification = "";
 
     if (ota_manager_pending_release_sequence() != 0U) {
         verification = "VERIFY";
     } else if (ota_manager_confirmed_release_sequence() != 0U) {
         verification = "OK";
-    } else {
-        verification = "";
     }
     lv_label_set_text_fmt(firmware_version_label, "FW:%s %s", ota_manager_running_version(),
                           verification);
@@ -210,6 +250,24 @@ static void scanner_toggle_cb(lv_event_t *event)
     }
 }
 
+static void ota_action_cb(lv_event_t *event)
+{
+    bool queued;
+
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    if (ota_manager_get_state() == OTA_MANAGER_STATE_READY) {
+        queued = ota_manager_request_start();
+    } else {
+        queued = ota_manager_request_check();
+    }
+    if (!queued) {
+        ESP_LOGW(TAG, "OTA request ignored because OTA is busy");
+    }
+}
+
 static void app_ui_render(void)
 {
     if (!bsp_display_lock(100)) {
@@ -218,6 +276,12 @@ static void app_ui_render(void)
 
     lv_label_set_text(scanner_status_label, scanner_state_text(displayed_scanner_state));
     lv_label_set_text(toggle_label, scanner_button_text(displayed_scanner_state));
+    lv_label_set_text(ota_action_label, ota_button_text());
+    if (ota_button_is_busy()) {
+        lv_obj_add_state(ota_action_button, LV_STATE_DISABLED);
+    } else {
+        lv_obj_remove_state(ota_action_button, LV_STATE_DISABLED);
+    }
     update_firmware_version();
     if (displayed_scanner_state == BLE_SCANNER_STATE_ERROR) {
         lv_label_set_text_fmt(device_count_label, "Scanner error: %d", displayed_scanner_error);
@@ -324,19 +388,29 @@ void app_ui_start(void)
         device_rows[row] = lv_label_create(lv_scr_act());
         lv_label_set_long_mode(device_rows[row], LV_LABEL_LONG_CLIP);
         lv_obj_set_width(device_rows[row], 300);
-        lv_obj_align(device_rows[row], LV_ALIGN_TOP_MID, 0, 97 + (int32_t)(row * 25));
+        lv_obj_align(device_rows[row], LV_ALIGN_TOP_MID, 0,
+                     97 + (int32_t)(row * DEVICE_LIST_ROW_HEIGHT));
     }
     update_device_list();
     update_network_status();
 
     lv_obj_t *button = lv_button_create(lv_scr_act());
-    lv_obj_set_size(button, 180, 30);
-    lv_obj_align(button, LV_ALIGN_BOTTOM_MID, 0, -5);
+    lv_obj_set_size(button, 145, 30);
+    lv_obj_align(button, LV_ALIGN_BOTTOM_LEFT, 10, -5);
     lv_obj_add_event_cb(button, scanner_toggle_cb, LV_EVENT_CLICKED, NULL);
 
     toggle_label = lv_label_create(button);
     lv_label_set_text(toggle_label, scanner_button_text(displayed_scanner_state));
     lv_obj_center(toggle_label);
+
+    ota_action_button = lv_button_create(lv_scr_act());
+    lv_obj_set_size(ota_action_button, 145, 30);
+    lv_obj_align(ota_action_button, LV_ALIGN_BOTTOM_RIGHT, -10, -5);
+    lv_obj_add_event_cb(ota_action_button, ota_action_cb, LV_EVENT_CLICKED, NULL);
+
+    ota_action_label = lv_label_create(ota_action_button);
+    lv_label_set_text(ota_action_label, ota_button_text());
+    lv_obj_center(ota_action_label);
 
     bsp_display_unlock();
 

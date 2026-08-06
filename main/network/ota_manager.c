@@ -487,18 +487,26 @@ static void ota_process_check(bool start_update, bool allow_downgrade, const cha
     ESP_LOGI(TAG, "manifest ready: version=%s, sequence=%lu, image_size=%lu", manifest.version,
              (unsigned long)manifest.release_sequence, (unsigned long)manifest.image_size);
     if (!start_update) {
-        ota_set_state(OTA_MANAGER_STATE_READY, ESP_OK);
+        if (!ota_manifest_is_newer_than(&manifest, ota_confirmed_sequence) ||
+            strcmp(manifest.version, running->version) == 0) {
+            ESP_LOGI(TAG, "no newer OTA release: version=%s, sequence=%lu, confirmed=%lu",
+                     manifest.version, (unsigned long)manifest.release_sequence,
+                     (unsigned long)ota_confirmed_sequence);
+            ota_set_state(OTA_MANAGER_STATE_UP_TO_DATE, ESP_OK);
+        } else {
+            ota_set_state(OTA_MANAGER_STATE_READY, ESP_OK);
+        }
         return;
     }
     if (!allow_downgrade && !ota_manifest_is_newer_than(&manifest, ota_confirmed_sequence)) {
-        ESP_LOGW(TAG, "release sequence %lu is not newer than confirmed %lu",
+        ESP_LOGI(TAG, "no newer OTA release: sequence=%lu, confirmed=%lu",
                  (unsigned long)manifest.release_sequence, (unsigned long)ota_confirmed_sequence);
-        ota_set_state(OTA_MANAGER_STATE_ERROR, ESP_ERR_INVALID_VERSION);
+        ota_set_state(OTA_MANAGER_STATE_UP_TO_DATE, ESP_OK);
         return;
     }
     if (strcmp(manifest.version, running->version) == 0) {
-        ESP_LOGW(TAG, "firmware version %s is already running", manifest.version);
-        ota_set_state(OTA_MANAGER_STATE_ERROR, ESP_ERR_INVALID_VERSION);
+        ESP_LOGI(TAG, "firmware version %s is already running", manifest.version);
+        ota_set_state(OTA_MANAGER_STATE_UP_TO_DATE, ESP_OK);
         return;
     }
     ota_set_state(OTA_MANAGER_STATE_PREPARING, ESP_OK);
@@ -583,7 +591,8 @@ uint32_t ota_manager_available_release_sequence(void) { return ota_manifest.rele
 const char *ota_manager_status_text(void)
 {
     static const char *const text[] = {
-        "Idle", "Checking", "Ready", "Preparing", "Downloading", "Verifying", "Rebooting", "Error",
+        "Idle", "Checking", "Ready", "UpToDate", "Preparing", "Downloading", "Verifying",
+        "Rebooting", "Error",
     };
     return ota_state <= OTA_MANAGER_STATE_ERROR ? text[ota_state] : "Unknown";
 }

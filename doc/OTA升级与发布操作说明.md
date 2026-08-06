@@ -7,8 +7,9 @@
 使用 ESP-IDF 内置根证书包验证服务器证书；下载后的镜像还必须匹配 Manifest 中的 SHA-256。
 
 当前版本尚未实现 Manifest 数字签名、批量活动编排、灰度发布或 SD 卡离线升级。发布服务器
-的 HTTPS 证书、MQTT 命令发布权限和 SHA-256 值必须由发布负责人复核。当前使用公共 CA
-证书包；厂内 OTA 服务稳定后，应评审是否改为固化厂内 CA 根证书。
+的 HTTPS 证书、MQTT 命令发布权限和 SHA-256 值必须由发布负责人复核。UAT 固件已嵌入厂内
+测试服务器的公开 PEM 证书；其他 HTTPS 地址仍使用 ESP-IDF 证书包。正式环境应采用受控 CA
+或固化的正式根证书，并完成证书轮换方案评审。
 
 ## MQTT 远程命令（第一阶段）
 
@@ -21,7 +22,7 @@ factory/product-status/gateway/<gateway_id>/commands/ota
 命令以 QoS 1 发布，JSON 必须包含：
 
 ```json
-{"message_type":"ota_command","command_id":"cmd-20260803-001","campaign_id":"pilot-01","manifest_url":"https://ota.example.com/manifest.json","expires_at_epoch_s":1780000000}
+{"message_type":"ota_command","command_id":"cmd-20260803-001","campaign_id":"pilot-01","manifest_url":"https://ble-gateway-uat.singularmedical.net/ota/manifest.json","expires_at_epoch_s":1780000000}
 ```
 
 `command_id` 和 `campaign_id` 仅可使用字母、数字、`-`、`_`、`.`、`:`；网关在 SNTP 已同步后
@@ -32,20 +33,19 @@ factory/product-status/gateway/<gateway_id>/commands/ota
 15 分钟无广播窗口，之后执行与串口 `ota start` 相同的镜像校验、切换与回滚流程；不允许远程
 降级。状态消息首期不进入 SD Outbox，服务端应按 `command_id` 保存活动状态并在超时后告警。
 
-## 发布文件
+## 发布模型
 
-发布构建必须固定 `PROJECT_VER`，不能将 `git describe` 的 `-dirty` 开发版本作为发布版本。可用
-以下脚本构建镜像并生成 Manifest：
+发布构建必须固定 `PROJECT_VER`。普通构建版本由仓库根目录 `version.txt` 定义（当前为
+`1.0.1`）；正式发布使用 `tools/publish_ota_uat.sh` 显式设置版本与发布序号，不能使用开发
+构建的 Git 哈希或 `-dirty` 字样。UAT 一键发布示例：
 
 ```bash
-source /home/sm-dawn/.espressif/v5.5.5/esp-idf/export.sh
-./tools/build_ota_release.sh 1.0.1 101 \
-  https://ota.example.com/ble-gateway/ble_gateway-1.0.1.bin \
-  release/manifest-1.0.1.json
+./tools/publish_ota_uat.sh 1.0.2 102
 ```
 
-脚本会读取镜像内的 ESP-IDF 应用描述，确认其版本为 `1.0.1`、项目名为 `ble_gateway`，再生成
-大小和 SHA-256。发布服务器提供生成的静态 JSON Manifest，例如：
+脚本会先检查 SSH 到 UAT 管理地址的连通性，再构建镜像、生成 SHA-256 Manifest、上传版本化
+镜像与 Manifest，最后才切换服务器的活动 `manifest.json`。完整操作、服务器路径、全擦除和
+回退步骤见 [ota/README.md](../ota/README.md)。
 
 仓库根目录的 `ota/` 仅用于**本机暂存**待上传的 `.bin`、Manifest 和可选页面，相关文件已被
 `.gitignore` 排除；正式发布内容由受控 OTA 文件服务器独立保存、备份和授权。提交固件源代码时
@@ -54,12 +54,12 @@ source /home/sm-dawn/.espressif/v5.5.5/esp-idf/export.sh
 ```json
 {
   "schema_version": 1,
-  "version": "1.0.1",
-  "release_sequence": 101,
+  "version": "1.0.2",
+  "release_sequence": 102,
   "hardware_model": "m5stack-cores3-se",
   "idf_target": "esp32s3",
   "partition_layout": "ble-gateway-16m-v1",
-  "image_url": "https://ota.example.com/ble-gateway/ble_gateway-1.0.1.bin",
+  "image_url": "https://ble-gateway-uat.singularmedical.net/ota/ble_gateway-1.0.2.bin",
   "image_size": 1600000,
   "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }
@@ -75,7 +75,7 @@ source /home/sm-dawn/.espressif/v5.5.5/esp-idf/export.sh
 先配置并保存 Manifest 地址：
 
 ```text
-cfg set ota_manifest_uri https://ota.example.com/ble-gateway/manifest.json
+cfg set ota_manifest_uri https://ble-gateway-uat.singularmedical.net/ota/manifest.json
 cfg commit
 ota check
 ota status
@@ -86,6 +86,10 @@ ota start
 已同步、SD 卡处于可写且未满状态、没有活动广播轮次时，才暂停扫描并等待采集/上传队列排空。
 任何前置条件、网络、长度或 SHA-256 校验失败都会保留当前固件并恢复扫描。
 
+现场也可使用 LCD 底部的 OTA 按钮：`Check update` 首先执行与 `ota check` 相同的检查，只有
+成功后才显示 `Start update`；第二次触摸才执行与 `ota start` 相同的升级。下载、校验和重启时
+按钮不可点击。该两步交互用于避免误触升级；受控降级仍只能使用物理串口命令。
+
 如质量人员需要执行回退验证，只能在物理串口现场明确输入：
 
 ```text
@@ -94,6 +98,11 @@ ota start --allow-downgrade
 
 该命令绕过发布序号检查，但不会绕过 HTTPS、硬件兼容、SHA-256、镜像版本和采集保护检查；
 不得用于日常部署。
+
+`release_sequence` 保存于 NVS，用于阻止普通 OTA 回退。因此 USB 手动烧录较旧镜像但未擦除
+NVS 时，普通 `ota start` 仍会拒绝序号小于或等于已确认序号的 Manifest。`ota status` 显示
+运行版本、可用版本与已确认序号，是 OTA 策略判断的依据；LCD 仅显示当前运行版本，避免将
+NVS 序列号误解为当前镜像已确认状态。
 
 完成写入后设备重启到新分区。新固件必须在 10 秒内恢复 BLE 扫描和 SD 存储；否则，或首次
 启动期间断电/崩溃，Bootloader 会回滚到上一有效镜像。NVS 中的网关 ID、位置、网络参数和

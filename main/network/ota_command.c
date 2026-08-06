@@ -79,6 +79,8 @@ static const char *ota_command_state_text(ota_manager_state_t state)
         return "checking";
     case OTA_MANAGER_STATE_READY:
         return "ready";
+    case OTA_MANAGER_STATE_UP_TO_DATE:
+        return "up_to_date";
     case OTA_MANAGER_STATE_PREPARING:
         return "waiting_safe_window";
     case OTA_MANAGER_STATE_DOWNLOADING:
@@ -169,7 +171,7 @@ static void ota_command_on_ota_state(ota_manager_state_t state, int error, void 
         return;
     }
     ota_command_publish_status(&active_command.command, ota_command_state_text(state), error);
-    if (state == OTA_MANAGER_STATE_ERROR) {
+    if (state == OTA_MANAGER_STATE_ERROR || state == OTA_MANAGER_STATE_UP_TO_DATE) {
         active_command.active = false;
     }
 }

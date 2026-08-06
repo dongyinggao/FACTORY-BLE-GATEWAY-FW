@@ -84,3 +84,6 @@ Desktop.ini
 # by the release process. Keep only the usage note in the source repository.
 ota/*
 !ota/README.md
+
+# Local provisioning values may contain Wi-Fi credentials.
+tools/provision_gateway.local.env
