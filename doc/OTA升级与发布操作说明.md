@@ -36,7 +36,7 @@ factory/product-status/gateway/<gateway_id>/commands/ota
 ## 发布模型
 
 发布构建必须固定 `PROJECT_VER`。普通构建版本由仓库根目录 `version.txt` 定义（当前为
-`1.0.1`）；正式发布使用 `tools/publish_ota_uat.sh` 显式设置版本与发布序号，不能使用开发
+`1.0.0`）；正式发布使用 `tools/publish_ota_uat.sh` 显式设置版本与发布序号，不能使用开发
 构建的 Git 哈希或 `-dirty` 字样。UAT 一键发布示例：
 
 ```bash

@@ -25,25 +25,25 @@ sudo ls -lah /srv/ble-gateway-data/ota
 不要将私钥、账号密码或生产证书放入本目录。
 
 项目根目录的 [`version.txt`](../version.txt) 定义普通 `idf.py build` 的当前基线版本；当前值为
-`1.0.1`。因此日常烧录的 `build/ble_gateway.bin` 会显示 `running_version=1.0.1`，不再使用
+`1.0.0`。因此日常烧录的 `build/ble_gateway.bin` 会显示 `running_version=1.0.0`，不再使用
 Git 哈希作为版本号。正式发布脚本仍通过 `-DPROJECT_VER=<version>` 覆盖该基线版本。
 
 ## 一键构建、打包与发布
 
 发布前先确认版本号和发布序号均为新值。例如当前已确认序号为 `106` 时，下一次可发布
-`1.0.2` / `107`：
+`1.0.1` / `107`：
 
 ```bash
-./tools/publish_ota_uat.sh 1.0.2 107
+./tools/publish_ota_uat.sh 1.0.1 107
 ```
 
 脚本会依次完成：
 
-1. 加载 ESP-IDF 5.5.5 环境，以固定 `PROJECT_VER=1.0.2` 构建 `build/release/ble_gateway.bin`。
-2. 从实际镜像生成 `ota/manifest-1.0.2.json`，其中包含镜像大小与 SHA-256。
+1. 加载 ESP-IDF 5.5.5 环境，以固定 `PROJECT_VER=1.0.1` 构建 `build/release/ble_gateway.bin`。
+2. 从实际镜像生成 `ota/manifest-1.0.1.json`，其中包含镜像大小与 SHA-256。
 3. 将镜像复制至本目录作为暂存文件。
 4. 通过 SSH/SCP 上传到服务器临时目录，再安装到
-   `/srv/ble-gateway-data/ota/ble_gateway-1.0.2.bin` 和版本化 Manifest 文件。
+   `/srv/ble-gateway-data/ota/ble_gateway-1.0.1.bin` 和版本化 Manifest 文件。
 5. **最后**用相同的版本化 Manifest 更新服务器的 `manifest.json`，使网关可发现新版本。
 
 脚本不会保存 SSH 或 `sudo` 密码；根据服务器策略，运行时会要求交互输入。默认 SSH 目标为
@@ -52,28 +52,28 @@ Git 哈希作为版本号。正式发布脚本仍通过 `-DPROJECT_VER=<version>
 或目录，可在运行前设置：
 
 ```bash
-OTA_SSH_TARGET=user@host OTA_REMOTE_DIR=/srv/ota ./tools/publish_ota_uat.sh 1.0.2 107 host
+OTA_SSH_TARGET=user@host OTA_REMOTE_DIR=/srv/ota ./tools/publish_ota_uat.sh 1.0.1 107 host
 ```
 
 发布后验证：
 
 ```bash
 curl -fsS https://ble-gateway-uat.singularmedical.net/ota/manifest.json
-curl -I https://ble-gateway-uat.singularmedical.net/ota/ble_gateway-1.0.2.bin
+curl -I https://ble-gateway-uat.singularmedical.net/ota/ble_gateway-1.0.1.bin
 ```
 
-网关执行 `ota check`、`ota status` 后，应显示 `available_version=1.0.2` 和
+网关执行 `ota check`、`ota status` 后，应显示 `available_version=1.0.1` 和
 `available:107`。
 
 ## 回退与版本测试
 
 ### 受控 OTA 回退（推荐）
 
-保留服务器上的历史镜像与历史 Manifest。要从新版本测试回 `1.0.1`，通过物理串口将
+保留服务器上的历史镜像与历史 Manifest。要从新版本测试回 `1.0.0`，通过物理串口将
 Manifest 临时指向历史文件，再明确允许降级：
 
 ```text
-cfg set ota_manifest_uri https://ble-gateway-uat.singularmedical.net/ota/manifest-1.0.1.json
+cfg set ota_manifest_uri https://ble-gateway-uat.singularmedical.net/ota/manifest-1.0.0.json
 cfg commit
 ota check
 ota start --allow-downgrade
@@ -85,11 +85,11 @@ SHA-256。它不会降低 NVS 中已确认的最高发布序号；因此回退�
 
 ### USB 串口直接恢复历史镜像
 
-当旧固件不支持 OTA、或需要从固定 `1.0.1` 基线重新开始验证时，可在断开调试器后用 USB
+当旧固件不支持 OTA、或需要从固定 `1.0.0` 基线重新开始验证时，可在断开调试器后用 USB
 串口将历史应用镜像写回 factory 分区。先从服务器取回保存的历史镜像：
 
 ```bash
-scp ble_gateway@192.168.19.21:/srv/ble-gateway-data/ota/ble_gateway-1.0.1.bin ota/
+scp ble_gateway@192.168.19.21:/srv/ble-gateway-data/ota/ble_gateway-1.0.0.bin ota/
 ```
 
 然后在本机执行（此操作保留 NVS 中的网关配置，但清除 OTA 分区选择，使 Bootloader 从
@@ -98,7 +98,7 @@ factory 分区 `0x20000` 启动）：
 ```bash
 source /home/sm-dawn/.espressif/v5.5.5/esp-idf/export.sh
 python -m esptool --chip esp32s3 --port /dev/ttyACM0 erase_region 0xf000 0x2000
-python -m esptool --chip esp32s3 --port /dev/ttyACM0 write_flash 0x20000 ota/ble_gateway-1.0.1.bin
+python -m esptool --chip esp32s3 --port /dev/ttyACM0 write_flash 0x20000 ota/ble_gateway-1.0.0.bin
 ```
 
 如果还要使发布序号策略也回到“出厂未确认”状态，只能擦除整个 NVS 分区或整片 Flash；这会同时
@@ -118,13 +118,13 @@ idf.py -p /dev/ttyACM0 flash
 ```
 
 第二条命令会烧录当前 `build/` 中的 bootloader、分区表、初始 OTA 数据和
-`build/ble_gateway.bin`。本项目当前普通构建版本由 `version.txt` 固定为 `1.0.1`；如刚修改
+`build/ble_gateway.bin`。本项目当前普通构建版本由 `version.txt` 固定为 `1.0.0`；如刚修改
 源代码，请先执行 `idf.py build`。擦除完成后必须重新通过串口配置网关。
 
 ## 全新或全擦除设备首次投用
 
 以下流程适用于全新网关，或已经执行 `erase-flash` 的设备。全擦除后 NVS 没有任何网络、网关
-身份和 OTA 发布序号；首次烧录的普通构建版本为 `1.0.1`。
+身份和 OTA 发布序号；首次烧录的普通构建版本为 `1.0.0`。
 
 ### 1. 构建、烧录并打开串口
 
@@ -186,12 +186,12 @@ ota status
 预期 `sys status` 包含 `Wi-Fi=Connected`、`SNTP=Synced`；配置了可访问 Broker 时还应显示
 `MQTT=Connected`。BLE 默认会自动开始扫描，也可使用 LCD 左下角按钮启停扫描。
 
-### 4. 从 1.0.1 验证首次 OTA
+### 4. 从 1.0.0 验证首次 OTA
 
-先在服务器发布更高版本和序号，例如 `1.0.2 / 102`：
+先在服务器发布更高版本和序号，例如 `1.0.1 / 107`：
 
 ```bash
-./tools/publish_ota_uat.sh 1.0.2 102
+./tools/publish_ota_uat.sh 1.0.1 107
 ```
 
 然后在网关 LCD 触摸 `Check update`，确认显示 `Start update` 后再次触摸；或通过串口执行：
@@ -202,14 +202,14 @@ ota status
 ota start
 ```
 
-升级成功重启后，`ota status` 应显示 `running_version=1.0.2`、`confirmed:102`，LCD 顶部显示
-`FW:1.0.2`。
+升级成功重启后，`ota status` 应显示 `running_version=1.0.1`、`confirmed:107`，LCD 顶部显示
+`FW:1.0.1`。
 
 若通过 USB 手动烧录了较旧镜像但保留 NVS，NVS 中的已确认发布序号不会自动降低。普通 OTA 仍会
 拒绝小于或等于已确认序号的 Manifest；以 `ota status` 中的版本与序号作为判断依据。要恢复至
 更高的已发布镜像，可在物理串口执行
 `ota start --allow-downgrade`；该命令仅放宽序号比较，仍会执行 HTTPS、兼容性、长度与 SHA-256
-校验。首次测试应保留 `1.0.1` 的版本化镜像和 Manifest，便于后续回退验证。
+校验。首次测试应保留 `1.0.0` 的版本化镜像和 Manifest，便于后续回退验证。
 
 ### 可选配置
 
