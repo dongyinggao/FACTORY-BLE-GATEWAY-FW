@@ -24,6 +24,10 @@ int main(void)
     assert(strstr(json, "\"broadcast_id\":\"BCAST-1\"") != NULL);
     assert(strstr(json, "\"device_mac\":\"AA:00:00:00:00:00\"") != NULL);
     assert(strstr(json, "\"broadcast_duration_s\":null") != NULL);
+    message.type = GATEWAY_BROADCAST_ACTIVE;
+    assert(gateway_json_encode_broadcast(json, sizeof(json), &message, &config) > 0);
+    assert(strstr(json, "\"event\":\"BROADCAST_ACTIVE\"") != NULL);
+    assert(strstr(json, "\"broadcast_duration_s\":19") != NULL);
     message.type = GATEWAY_BROADCAST_ENDED;
     assert(gateway_json_encode_broadcast(json, sizeof(json), &message, &config) > 0);
     assert(strstr(json, "\"broadcast_duration_s\":19") != NULL);

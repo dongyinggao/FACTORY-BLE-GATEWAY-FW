@@ -47,6 +47,19 @@ static void publisher_publish_volatile(const char *json)
     }
 }
 
+/* Active observations are a best-effort freshness signal. Start/end records
+ * stay on the durable Outbox path; dropping an activity sample while offline
+ * must not consume SD endurance or evict lifecycle evidence. */
+static void publisher_publish_activity(const char *json)
+{
+    if (!mqtt_service_is_connected()) {
+        return;
+    }
+    if (mqtt_service_publish(json) < 0) {
+        ESP_LOGW(TAG, "broadcast activity publish failed");
+    }
+}
+
 /* Health is low-priority telemetry. When MQTT is already connected it does
  * not need an SD round trip; broadcast lifecycle records remain durable. */
 static void publisher_publish_health_direct(const char *json)
@@ -72,14 +85,31 @@ static void make_broadcast(const device_lifecycle_event_t *event, char json[GATE
 {
     gateway_broadcast_message_t message={0};
     bool synced;
-    message.type=event->type==DEVICE_LIFECYCLE_BROADCAST_STARTED ? GATEWAY_BROADCAST_STARTED : GATEWAY_BROADCAST_ENDED;
+    switch (event->type) {
+    case DEVICE_LIFECYCLE_BROADCAST_STARTED:
+        message.type = GATEWAY_BROADCAST_STARTED;
+        break;
+    case DEVICE_LIFECYCLE_BROADCAST_ACTIVE:
+        message.type = GATEWAY_BROADCAST_ACTIVE;
+        break;
+    case DEVICE_LIFECYCLE_BROADCAST_ENDED:
+        message.type = GATEWAY_BROADCAST_ENDED;
+        break;
+    default:
+        return;
+    }
     message.device=*event;
-    message.event_uptime_s=(message.type==GATEWAY_BROADCAST_STARTED ? event->broadcast_started_ms : event->end_detected_ms)/1000U;
-    if (message.type == GATEWAY_BROADCAST_ENDED) {
+    message.event_uptime_s=(message.type==GATEWAY_BROADCAST_STARTED ? event->broadcast_started_ms :
+                            message.type==GATEWAY_BROADCAST_ENDED ? event->end_detected_ms :
+                            event->last_seen_ms)/1000U;
+    if (message.type != GATEWAY_BROADCAST_STARTED) {
         message.broadcast_duration_s = (event->last_seen_ms - event->broadcast_started_ms) / 1000U;
     }
     gateway_event_id_make(message.event_id,sizeof(message.event_id),boot_id,++sequence);
-    synced=time_service_format_wall_ms(message.type==GATEWAY_BROADCAST_STARTED ? event->broadcast_started_wall_ms : event->end_detected_wall_ms,message.recorded_at,sizeof(message.recorded_at));
+    synced=time_service_format_wall_ms(message.type==GATEWAY_BROADCAST_STARTED ? event->broadcast_started_wall_ms :
+                                       message.type==GATEWAY_BROADCAST_ENDED ? event->end_detected_wall_ms :
+                                       event->last_seen_wall_ms,
+                                       message.recorded_at,sizeof(message.recorded_at));
     message.time_synced=synced;
     if (synced) {
         time_service_format_wall_ms(event->broadcast_started_wall_ms,message.broadcast_started_at,sizeof(message.broadcast_started_at));
@@ -165,26 +195,42 @@ static void publish_next(void)
     }
     ESP_LOGD(TAG, "published %s message_id=%d", health ? "health" : "broadcast", message_id);
 }
+static void publisher_handle_lifecycle_event(const device_lifecycle_event_t *event)
+{
+    char json[GATEWAY_JSON_MAX_LEN];
+
+    make_broadcast(event, json);
+    if (gateway_outbox_is_ready()) {
+        if (!gateway_outbox_enqueue_broadcast(json)) {
+            ESP_LOGE(TAG,"broadcast persistence failed");
+            if (mqtt_service_is_connected()) {
+                ESP_LOGW(TAG, "sending broadcast without persistent outbox");
+                publisher_publish_volatile(json);
+            }
+        }
+    } else if (mqtt_service_is_connected()) {
+        publisher_publish_volatile(json);
+    } else {
+        publisher_report_unrecoverable_drop();
+    }
+}
+
 static void publisher_task(void *arg)
 {
-    QueueHandle_t queue=device_manager_get_upload_queue(); device_lifecycle_event_t event; int message_id; uint32_t last_health=0;
+    QueueHandle_t queue=device_manager_get_upload_queue();
+    QueueHandle_t activity_queue=device_manager_get_activity_queue();
+    device_lifecycle_event_t event;
+    int message_id;
+    uint32_t last_health=0;
     (void)arg;
     while (true) {
         gateway_outbox_sync_storage();
-        if (xQueueReceive(queue,&event,pdMS_TO_TICKS(200))==pdTRUE) {
-            char json[GATEWAY_JSON_MAX_LEN]; make_broadcast(&event,json);
-            if (gateway_outbox_is_ready()) {
-                if (!gateway_outbox_enqueue_broadcast(json)) {
-                    ESP_LOGE(TAG,"broadcast persistence failed");
-                    if (mqtt_service_is_connected()) {
-                        ESP_LOGW(TAG, "sending broadcast without persistent outbox");
-                        publisher_publish_volatile(json);
-                    }
-                }
-            } else if (mqtt_service_is_connected()) {
-                publisher_publish_volatile(json);
-            }
-            else publisher_report_unrecoverable_drop();
+        if (xQueueReceive(queue,&event,0)==pdTRUE) {
+            publisher_handle_lifecycle_event(&event);
+        } else if (xQueueReceive(activity_queue,&event,pdMS_TO_TICKS(200))==pdTRUE) {
+            char json[GATEWAY_JSON_MAX_LEN];
+            make_broadcast(&event, json);
+            publisher_publish_activity(json);
         }
         while (mqtt_service_take_puback(&message_id)) {
             if (gateway_publisher_ack_accept(&publish_ack, message_id)) {

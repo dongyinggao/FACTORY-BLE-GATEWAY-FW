@@ -27,7 +27,12 @@ int gateway_json_encode_broadcast(char *out, size_t size, const gateway_broadcas
 {
     char mac[18]; size_t used=0; const char *event;
     if (!out || !m || !c || !size) return -1;
-    event = m->type == GATEWAY_BROADCAST_STARTED ? "BROADCAST_STARTED" : "BROADCAST_ENDED";
+    switch (m->type) {
+    case GATEWAY_BROADCAST_STARTED: event = "BROADCAST_STARTED"; break;
+    case GATEWAY_BROADCAST_ACTIVE: event = "BROADCAST_ACTIVE"; break;
+    case GATEWAY_BROADCAST_ENDED: event = "BROADCAST_ENDED"; break;
+    default: return -1;
+    }
     snprintf(mac,sizeof(mac),"%02X:%02X:%02X:%02X:%02X:%02X",m->device.address[5],m->device.address[4],m->device.address[3],m->device.address[2],m->device.address[1],m->device.address[0]);
     if (!append(out,size,&used,"{") || !key_string(out,size,&used,"message_type","broadcast",true) ||
         !key_string(out,size,&used,"event_id",m->event_id,true) ||
@@ -42,7 +47,7 @@ int gateway_json_encode_broadcast(char *out, size_t size, const gateway_broadcas
         !key_string(out,size,&used,"recorded_at",m->recorded_at,true) ||
         !key_string(out,size,&used,"broadcast_started_at",m->broadcast_started_at,true) ||
         !key_string(out,size,&used,"broadcast_ended_at",m->broadcast_ended_at,true) ||
-        (m->type == GATEWAY_BROADCAST_ENDED &&
+        (m->type != GATEWAY_BROADCAST_STARTED &&
          !append(out,size,&used,"\"broadcast_duration_s\":%lu,",(unsigned long)m->broadcast_duration_s)) ||
         (m->type == GATEWAY_BROADCAST_STARTED && !append(out,size,&used,"\"broadcast_duration_s\":null,")) ||
         !key_string(out,size,&used,"end_detected_at",m->end_detected_at,false) || !append(out,size,&used,"}")) return -1;

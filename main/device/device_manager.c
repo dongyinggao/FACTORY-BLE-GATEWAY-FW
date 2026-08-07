@@ -17,10 +17,12 @@ static const char *TAG = "device_manager";
 static QueueHandle_t ui_event_queue;
 static QueueHandle_t capture_event_queue;
 static QueueHandle_t upload_event_queue;
+static QueueHandle_t activity_event_queue;
 static device_registry_t registry;
 static device_observation_clock_t observation_clock;
 static uint32_t capture_drop_count;
 static uint32_t upload_drop_count;
+static uint32_t activity_drop_count;
 static uint32_t ui_drop_count;
 static uint32_t table_reject_count;
 static uint32_t ui_queue_high_watermark;
@@ -140,6 +142,33 @@ static void manager_publish_lifecycle(device_lifecycle_event_type_t type,
     }
 }
 
+/* Activity observations are intentionally low priority: they make a long
+ * broadcast visible to the server but must never consume the durable CSV /
+ * Outbox path used by start and end records. */
+static void manager_publish_activity(const managed_device_t *device)
+{
+    device_lifecycle_event_t event = {
+        .type = DEVICE_LIFECYCLE_BROADCAST_ACTIVE,
+        .rssi = device->report.rssi,
+        .broadcast_started_ms = device->broadcast_started_ms,
+        .last_seen_ms = device->last_seen_ms,
+        .broadcast_started_wall_ms = device->broadcast_started_wall_ms,
+        .last_seen_wall_ms = device->last_seen_wall_ms,
+    };
+
+    memcpy(event.broadcast_id, device->broadcast_id, sizeof(event.broadcast_id));
+    memcpy(event.name, device->report.name, sizeof(event.name));
+    memcpy(event.address, device->report.address, sizeof(event.address));
+    if (xQueueSend(activity_event_queue, &event, 0) == pdTRUE) {
+        return;
+    }
+    ++activity_drop_count;
+    if (activity_drop_count == 1U || (activity_drop_count % 10U) == 0U) {
+        ESP_LOGW(TAG, "activity queue full; observations dropped=%lu",
+                 (unsigned long)activity_drop_count);
+    }
+}
+
 static void manager_assign_broadcast_id(managed_device_t *device)
 {
     ++broadcast_sequence;
@@ -168,11 +197,13 @@ static void manager_process_report(const ble_scan_report_t *report, uint64_t wal
     case DEVICE_REGISTRY_ADDED:
         ESP_LOGI(TAG, "device added: %s", report->name);
         manager_assign_broadcast_id(&registry.devices[index]);
+        registry.devices[index].last_active_published_ms = registry.devices[index].broadcast_started_ms;
         manager_publish_ui(&registry.devices[index]);
         manager_publish_lifecycle(DEVICE_LIFECYCLE_BROADCAST_STARTED, &registry.devices[index]);
         break;
     case DEVICE_REGISTRY_BROADCAST_STARTED:
         manager_assign_broadcast_id(&registry.devices[index]);
+        registry.devices[index].last_active_published_ms = registry.devices[index].broadcast_started_ms;
         manager_publish_ui(&registry.devices[index]);
         manager_publish_lifecycle(DEVICE_LIFECYCLE_BROADCAST_STARTED, &registry.devices[index]);
         break;
@@ -185,6 +216,23 @@ static void manager_process_report(const ble_scan_report_t *report, uint64_t wal
         break;
     default:
         break;
+    }
+}
+
+static void manager_publish_active_broadcasts(uint32_t now_ms)
+{
+    if (!observation_clock.observing) {
+        return;
+    }
+    for (size_t index = 0; index < DEVICE_MANAGER_MAX_DEVICES; ++index) {
+        managed_device_t *device = &registry.devices[index];
+        if (!device->broadcasting || device->report.name[0] == '\0' ||
+            (uint32_t)(now_ms - device->last_active_published_ms) <
+                DEVICE_MANAGER_BROADCAST_ACTIVE_INTERVAL_MS) {
+            continue;
+        }
+        device->last_active_published_ms = now_ms;
+        manager_publish_activity(device);
     }
 }
 
@@ -230,6 +278,7 @@ static void device_manager_task(void *parameter)
             }
         }
         manager_mark_ended_broadcasts(wall_ms);
+        manager_publish_active_broadcasts(device_observation_clock_now(&observation_clock));
     }
 }
 
@@ -245,6 +294,10 @@ void device_manager_init(void)
                                                sizeof(device_lifecycle_event_t),
                                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     configASSERT(upload_event_queue != NULL);
+    activity_event_queue = xQueueCreateWithCaps(DEVICE_MANAGER_ACTIVITY_QUEUE_LEN,
+                                                 sizeof(device_lifecycle_event_t),
+                                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    configASSERT(activity_event_queue != NULL);
     device_observation_clock_init(&observation_clock, manager_now_ms());
     broadcast_boot_id = esp_random();
     broadcast_sequence = 0;
@@ -277,6 +330,11 @@ QueueHandle_t device_manager_get_upload_queue(void)
     return upload_event_queue;
 }
 
+QueueHandle_t device_manager_get_activity_queue(void)
+{
+    return activity_event_queue;
+}
+
 uint32_t device_manager_capture_drop_count(void)
 {
     return capture_drop_count;
@@ -285,6 +343,11 @@ uint32_t device_manager_capture_drop_count(void)
 uint32_t device_manager_upload_drop_count(void)
 {
     return upload_drop_count;
+}
+
+uint32_t device_manager_activity_drop_count(void)
+{
+    return activity_drop_count;
 }
 
 uint32_t device_manager_table_reject_count(void)

@@ -10,6 +10,7 @@
 #define DEVICE_MANAGER_DEFAULT_BCAST_END_MS 5000U
 #define DEVICE_MANAGER_MIN_BCAST_END_MS 5000U
 #define DEVICE_MANAGER_MAX_BCAST_END_MS 300000U
+#define DEVICE_MANAGER_BROADCAST_ACTIVE_INTERVAL_MS 60000U
 
 typedef struct {
     ble_scan_report_t report;
@@ -17,6 +18,7 @@ typedef struct {
     char broadcast_id[24];
     uint32_t broadcast_started_ms;
     uint32_t last_seen_ms;
+    uint32_t last_active_published_ms;
     uint32_t end_detected_ms;
     uint64_t broadcast_started_wall_ms;
     uint64_t last_seen_wall_ms;

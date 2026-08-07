@@ -9,7 +9,11 @@
 #define GATEWAY_EVENT_ID_MAX_LEN 48
 #define GATEWAY_JSON_MAX_LEN 768
 
-typedef enum { GATEWAY_BROADCAST_STARTED, GATEWAY_BROADCAST_ENDED } gateway_broadcast_type_t;
+typedef enum {
+    GATEWAY_BROADCAST_STARTED,
+    GATEWAY_BROADCAST_ACTIVE,
+    GATEWAY_BROADCAST_ENDED,
+} gateway_broadcast_type_t;
 
 typedef struct {
     char event_id[GATEWAY_EVENT_ID_MAX_LEN];

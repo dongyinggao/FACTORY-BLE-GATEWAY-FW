@@ -6,6 +6,7 @@
 
 typedef enum {
     DEVICE_LIFECYCLE_BROADCAST_STARTED,
+    DEVICE_LIFECYCLE_BROADCAST_ACTIVE,
     DEVICE_LIFECYCLE_BROADCAST_ENDED,
 } device_lifecycle_event_type_t;
 

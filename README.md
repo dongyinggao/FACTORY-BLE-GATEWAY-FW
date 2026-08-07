@@ -92,6 +92,10 @@ cfg show
 factory/product-status/gateway/<gateway_id>/events
 ```
 
+对持续超过 60 秒的同一轮广播，网关额外发送低频 `BROADCAST_ACTIVE`（每 MAC 最多每分钟一条），
+用于服务端确认设备仍在广播并识别长时间异常。该消息不写 CSV、不进入 SD Outbox；
+`BROADCAST_STARTED` 与 `BROADCAST_ENDED` 仍是本地持久化和断网重传的可靠记录。
+
 全新设备、整片 Flash 擦除、首次 NVS 配置和 `1.0.1 → 1.0.2` OTA 验证的逐步操作见
 [OTA 发布制品暂存与 UAT 发布](ota/README.md)。普通 `idf.py build` 的固件版本由根目录
 [`version.txt`](version.txt) 定义，当前基线为 `1.0.1`；正式发布脚本会显式覆盖该版本。
