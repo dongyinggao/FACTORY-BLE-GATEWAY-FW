@@ -37,7 +37,7 @@ static uint32_t manager_now_ms(void)
 }
 
 /* Absolute-time formatting uses esp_timer in time_service. Keep lifecycle
- * wall timestamps on that same clock; application uptime remains tick-based. */
+ * timestamps on that same clock; application uptime remains tick-based. */
 static uint64_t manager_wall_timebase_ms(void)
 {
     return (uint64_t)(esp_timer_get_time() / 1000LL);

@@ -12,7 +12,9 @@ Example:
 The Wi-Fi password is requested without echo. For a controlled production
 station it may instead be supplied through GATEWAY_WIFI_PASSWORD. Other
 settings can be overridden with GATEWAY_ID, GATEWAY_LOCATION, BCAST_END_S,
-WIFI_SSID, MQTT_URI, MQTT_QOS, NTP_SERVER, TIMEZONE, and OTA_MANIFEST_URI.
+WIFI_SSID, MQTT_URI, MQTT_USERNAME, MQTT_PASSWORD, MQTT_QOS, NTP_SERVER,
+TIMEZONE, and OTA_MANIFEST_URI. MQTT credentials are written only when the
+corresponding environment variables are supplied.
 EOF
 }
 
@@ -31,7 +33,10 @@ GATEWAY_ID=${GATEWAY_ID:-GW-01}
 GATEWAY_LOCATION=${GATEWAY_LOCATION:-Room101-North}
 BCAST_END_S=${BCAST_END_S:-5}
 WIFI_SSID=${WIFI_SSID:-singularmedical-guest}
-MQTT_URI=${MQTT_URI:-mqtt://192.168.20.211:1883}
+# UAT Mosquitto is hosted with the OTA/web server. Keep this as the current
+# test default; production provisioning must override it with mqtts:// URI.
+MQTT_URI=${MQTT_URI:-mqtt://192.168.19.21:1883}
+MQTT_USERNAME=${MQTT_USERNAME:-}
 MQTT_QOS=${MQTT_QOS:-1}
 NTP_SERVER=${NTP_SERVER:-ntp.aliyun.com}
 TIMEZONE=${TIMEZONE:-CST-8}
@@ -64,10 +69,14 @@ export PROVISION_BCAST_END_S="$BCAST_END_S"
 export PROVISION_WIFI_SSID="$WIFI_SSID"
 export PROVISION_WIFI_PASSWORD="$GATEWAY_WIFI_PASSWORD"
 export PROVISION_MQTT_URI="$MQTT_URI"
+export PROVISION_MQTT_USERNAME="$MQTT_USERNAME"
 export PROVISION_MQTT_QOS="$MQTT_QOS"
 export PROVISION_NTP_SERVER="$NTP_SERVER"
 export PROVISION_TIMEZONE="$TIMEZONE"
 export PROVISION_OTA_MANIFEST_URI="$OTA_MANIFEST_URI"
+if [[ -v MQTT_PASSWORD ]]; then
+    export PROVISION_MQTT_PASSWORD="$MQTT_PASSWORD"
+fi
 
 "$PYTHON_BIN" - <<'PY'
 import os
@@ -89,6 +98,10 @@ commands = [
     ("timezone", os.environ["PROVISION_TIMEZONE"]),
     ("ota_manifest_uri", os.environ["PROVISION_OTA_MANIFEST_URI"]),
 ]
+if os.environ.get("PROVISION_MQTT_USERNAME"):
+    commands.append(("mqtt_username", os.environ["PROVISION_MQTT_USERNAME"]))
+if "PROVISION_MQTT_PASSWORD" in os.environ:
+    commands.append(("mqtt_password", os.environ["PROVISION_MQTT_PASSWORD"]))
 
 try:
     connection = serial.Serial(os.environ["PROVISION_PORT"], 115200, timeout=0.2,
@@ -150,4 +163,4 @@ finally:
 print("Provisioning completed. The cfg show output above is the configuration verification result.")
 PY
 
-unset GATEWAY_WIFI_PASSWORD PROVISION_WIFI_PASSWORD
+unset GATEWAY_WIFI_PASSWORD PROVISION_WIFI_PASSWORD MQTT_PASSWORD PROVISION_MQTT_PASSWORD

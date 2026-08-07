@@ -76,9 +76,14 @@ cfg show
 ```
 
 默认值为本项目 UAT 网关 `GW-01`、`Room101-North`、5 秒广播结束判定、
-`singularmedical-guest` 与 `mqtt://192.168.20.211:1883`。产线脚本可通过环境变量覆盖，例如
+`singularmedical-guest` 与 `mqtt://192.168.19.21:1883`。产线脚本可通过环境变量覆盖，例如
 `GATEWAY_ID=GW-02 GATEWAY_LOCATION=Room102 ./tools/provision_gateway.sh /dev/ttyACM0`。
 完成后用 `cfg show` 复核（密码会隐藏）。
+
+`GW-01` 和 `Room101-North` 仅是 UAT 示例。实际安装时必须用唯一的网关 ID 和准确安装位置覆盖；
+当前 UAT 使用明文 `mqtt://` 且无账号密码，正式环境应改为具有独立账号、CA 证书校验的
+`mqtts://<broker-domain>:8883`。脚本支持通过 `MQTT_USERNAME`、`MQTT_PASSWORD` 写入认证信息；
+未提供它们时不会改动当前 NVS 中已有的 MQTT 认证字段。
 
 `bcast_end_s` 范围为 5～300 秒，默认 5 秒；它表示最后一个有效广播包后，
 网关等待多久才生成 `BROADCAST_ENDED`。MQTT 主题为：
